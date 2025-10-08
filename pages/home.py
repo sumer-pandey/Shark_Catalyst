@@ -194,7 +194,7 @@ def page_home(filters):
     st.markdown("## Sector-wise breakdown")
     # Sector breakdown — exclude zero-total sectors and show download CSV
     sectors_sql = """
-    sql SELECT COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(COALESCE(invested_amount,0)) AS total_invested  
+    SELECT COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(COALESCE(invested_amount,0)) AS total_invested  
     FROM deals
     WHERE (:season = 'All' OR season = :season)
     GROUP BY COALESCE(sector,'Unknown')
