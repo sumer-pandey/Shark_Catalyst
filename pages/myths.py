@@ -17,13 +17,13 @@ MYTHS = [
               COUNT(*) AS total_onair,
               SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed_deals,
               CAST(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(COUNT(*),0) AS closure_rate
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN invested_amount IS NOT NULL THEN 'Closed' ELSE 'Not closed' END AS status,
                    COUNT(*) AS cnt
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN invested_amount IS NOT NULL THEN 'Closed' ELSE 'Not closed' END;
         """,
@@ -37,20 +37,20 @@ MYTHS = [
         "check_sql": """
             SELECT
               SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS total_funded,
-              SUM(CASE WHEN invested_amount IS NOT NULL AND ISNULL(royalty_percentage,0)=0 THEN 1 ELSE 0 END) AS equity_only_funded,
-              CAST(SUM(CASE WHEN invested_amount IS NOT NULL AND ISNULL(royalty_percentage,0)=0 THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END),0) AS equity_only_share_among_funded
-            FROM dbo.deals
+              SUM(CASE WHEN invested_amount IS NOT NULL AND COALESCE(royalty_percentage,0)=0 THEN 1 ELSE 0 END) AS equity_only_funded,
+              CAST(SUM(CASE WHEN invested_amount IS NOT NULL AND COALESCE(royalty_percentage,0)=0 THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END),0) AS equity_only_share_among_funded
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN invested_amount IS NULL THEN 'Unknown'
-                        WHEN ISNULL(royalty_percentage,0) > 0 THEN 'Royalty'
+                        WHEN COALESCE(royalty_percentage,0) > 0 THEN 'Royalty'
                         ELSE 'Equity-only' END AS instrument,
                    COUNT(*) AS pitches
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN invested_amount IS NULL THEN 'Unknown'
-                        WHEN ISNULL(royalty_percentage,0) > 0 THEN 'Royalty'
+                        WHEN COALESCE(royalty_percentage,0) > 0 THEN 'Royalty'
                         ELSE 'Equity-only' END;
         """,
         "verdict_rule": "True if equity_only_share_among_funded > 0.50 (i.e., >50% of funded deals are equity-only).",
@@ -67,7 +67,7 @@ MYTHS = [
               SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS total_funded,
               SUM(CASE WHEN invested_amount IS NOT NULL AND invested_amount < 100 THEN 1 ELSE 0 END) AS funded_under_1cr,
               CAST(SUM(CASE WHEN invested_amount IS NOT NULL AND invested_amount < 100 THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END),0) AS pct_under_1cr
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
@@ -76,7 +76,7 @@ MYTHS = [
                         WHEN invested_amount BETWEEN 100 AND 499 THEN '1-5 Cr'
                         ELSE '5+ Cr' END AS bucket,
                    COUNT(*) AS cnt
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN invested_amount IS NULL THEN 'Unknown'
                         WHEN invested_amount < 100 THEN '<1 Cr'
@@ -93,23 +93,23 @@ MYTHS = [
         "context": "Join deals to dim_city (city_norm) and compare funded rates for metro vs non-metro.",
         "check_sql": """
             SELECT
-              SUM(CASE WHEN ISNULL(dc.is_metro,0)=1 THEN 1 ELSE 0 END) AS total_metro,
-              SUM(CASE WHEN ISNULL(dc.is_metro,0)=1 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_metro,
-              SUM(CASE WHEN ISNULL(dc.is_metro,0)=0 THEN 1 ELSE 0 END) AS total_nonmetro,
-              SUM(CASE WHEN ISNULL(dc.is_metro,0)=0 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_nonmetro,
-              CAST(SUM(CASE WHEN ISNULL(dc.is_metro,0)=1 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN ISNULL(dc.is_metro,0)=1 THEN 1 ELSE 0 END),0) AS funded_rate_metro,
-              CAST(SUM(CASE WHEN ISNULL(dc.is_metro,0)=0 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN ISNULL(dc.is_metro,0)=0 THEN 1 ELSE 0 END),0) AS funded_rate_nonmetro
-            FROM dbo.deals d
-            LEFT JOIN dbo.dim_city dc ON LOWER(LTRIM(RTRIM(d.pitchers_city))) = dc.city_norm
+              SUM(CASE WHEN COALESCE(dc.is_metro,0)=1 THEN 1 ELSE 0 END) AS total_metro,
+              SUM(CASE WHEN COALESCE(dc.is_metro,0)=1 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_metro,
+              SUM(CASE WHEN COALESCE(dc.is_metro,0)=0 THEN 1 ELSE 0 END) AS total_nonmetro,
+              SUM(CASE WHEN COALESCE(dc.is_metro,0)=0 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_nonmetro,
+              CAST(SUM(CASE WHEN COALESCE(dc.is_metro,0)=1 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN COALESCE(dc.is_metro,0)=1 THEN 1 ELSE 0 END),0) AS funded_rate_metro,
+              CAST(SUM(CASE WHEN COALESCE(dc.is_metro,0)=0 AND d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN COALESCE(dc.is_metro,0)=0 THEN 1 ELSE 0 END),0) AS funded_rate_nonmetro
+            FROM deals d
+            LEFT JOIN dim_city dc ON LOWER(LTRIM(RTRIM(d.pitchers_city))) = dc.city_norm
             WHERE (:season = 'All' OR d.season = :season);
         """,
         "plot_sql": """
-            SELECT COALESCE(CASE WHEN ISNULL(dc.is_metro,0)=1 THEN 'Metro' WHEN ISNULL(dc.is_metro,0)=0 THEN 'Non-metro' ELSE 'Unknown' END,'Unknown') AS city_type,
+            SELECT COALESCE(CASE WHEN COALESCE(dc.is_metro,0)=1 THEN 'Metro' WHEN COALESCE(dc.is_metro,0)=0 THEN 'Non-metro' ELSE 'Unknown' END,'Unknown') AS city_type,
                    COUNT(*) AS pitches, SUM(CASE WHEN d.invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals d
-            LEFT JOIN dbo.dim_city dc ON LOWER(LTRIM(RTRIM(d.pitchers_city))) = dc.city_norm
+            FROM deals d
+            LEFT JOIN dim_city dc ON LOWER(LTRIM(RTRIM(d.pitchers_city))) = dc.city_norm
             WHERE (:season = 'All' OR d.season = :season)
-            GROUP BY COALESCE(CASE WHEN ISNULL(dc.is_metro,0)=1 THEN 'Metro' WHEN ISNULL(dc.is_metro,0)=0 THEN 'Non-metro' ELSE 'Unknown' END,'Unknown');
+            GROUP BY COALESCE(CASE WHEN COALESCE(dc.is_metro,0)=1 THEN 'Metro' WHEN COALESCE(dc.is_metro,0)=0 THEN 'Non-metro' ELSE 'Unknown' END,'Unknown');
         """,
         "explainer": "Compares funded rates for metro and non-metro mapped cities (boolean is_metro in dim_city).",
         "explorer_prefill": {"city_type": "Metro"}
@@ -127,7 +127,7 @@ MYTHS = [
               SUM(CASE WHEN male_presenters>0 AND female_presenters=0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_male_only,
               CAST(SUM(CASE WHEN female_presenters>0 AND male_presenters=0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN female_presenters>0 AND male_presenters=0 THEN 1 ELSE 0 END),0) AS funded_rate_female_only,
               CAST(SUM(CASE WHEN male_presenters>0 AND female_presenters=0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN male_presenters>0 AND female_presenters=0 THEN 1 ELSE 0 END),0) AS funded_rate_male_only
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
@@ -136,7 +136,7 @@ MYTHS = [
                         WHEN male_presenters>0 AND female_presenters>0 THEN 'Mixed'
                         ELSE 'Unknown' END AS group_label,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN female_presenters>0 AND male_presenters=0 THEN 'Female-only'
                         WHEN male_presenters>0 AND female_presenters=0 THEN 'Male-only'
@@ -157,13 +157,13 @@ MYTHS = [
               AVG(CASE WHEN Number_of_sharks_in_deal > 1 THEN NULLIF(invested_amount,0) END) AS avg_multi,
               SUM(CASE WHEN Number_of_sharks_in_deal = 1 THEN 1 ELSE 0 END) AS total_single,
               AVG(CASE WHEN Number_of_sharks_in_deal = 1 THEN NULLIF(invested_amount,0) END) AS avg_single
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN Number_of_sharks_in_deal > 1 THEN 'Multiple sharks' WHEN Number_of_sharks_in_deal = 1 THEN 'Single shark' ELSE 'Unknown' END AS shark_count,
                    COUNT(*) AS pitches, AVG(NULLIF(invested_amount,0)) AS avg_invested
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN Number_of_sharks_in_deal > 1 THEN 'Multiple sharks' WHEN Number_of_sharks_in_deal = 1 THEN 'Single shark' ELSE 'Unknown' END;
         """,
@@ -180,13 +180,13 @@ MYTHS = [
               SUM(CASE WHEN Number_of_sharks_in_deal > 1 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS multi_shark_funded,
               SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS total_funded,
               CAST(SUM(CASE WHEN Number_of_sharks_in_deal > 1 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END),0) AS pct_multi_shark
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN Number_of_sharks_in_deal > 1 THEN 'Multiple sharks' WHEN Number_of_sharks_in_deal = 1 THEN 'Single shark' ELSE 'Unknown' END AS shark_count,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN Number_of_sharks_in_deal > 1 THEN 'Multiple sharks' WHEN Number_of_sharks_in_deal = 1 THEN 'Single shark' ELSE 'Unknown' END;
         """,
@@ -202,11 +202,11 @@ MYTHS = [
             SELECT
               AVG(NULLIF(equity_asked,0)) AS avg_asked_equity,
               AVG(NULLIF(equity_final,0)) AS avg_final_equity
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT TOP 200 equity_asked, equity_final FROM dbo.deals
+            SELECT TOP 200 equity_asked, equity_final FROM deals
             WHERE equity_asked IS NOT NULL AND (:season = 'All' OR season = :season)
             ORDER BY equity_asked DESC;
         """,
@@ -222,12 +222,12 @@ MYTHS = [
             SELECT
               AVG(NULLIF(valuation_requested,0)) AS avg_ask_valuation,
               AVG(NULLIF(Deal_Valuation,0)) AS avg_deal_valuation
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT TOP 200 asked_amount AS asked_lakhs, invested_amount AS invested_lakhs, equity_asked, equity_final
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             ORDER BY asked_amount DESC;
         """,
@@ -244,7 +244,7 @@ MYTHS = [
               AVG(NULLIF(monthly_sales,0)) AS avg_monthly_all,
               AVG(CASE WHEN invested_amount IS NOT NULL THEN NULLIF(monthly_sales,0) END) AS avg_monthly_funded,
               AVG(CASE WHEN invested_amount IS NULL THEN NULLIF(monthly_sales,0) END) AS avg_monthly_notfunded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
@@ -254,7 +254,7 @@ MYTHS = [
                    WHEN monthly_sales BETWEEN 200000 AND 999999 THEN '2L-10L'
                    ELSE '10L+' END AS sales_bucket,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN monthly_sales IS NULL THEN 'Unknown'
                    WHEN monthly_sales < 50000 THEN '<50k'
@@ -278,12 +278,12 @@ MYTHS = [
               SUM(CASE WHEN Has_Patents = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_no_patent,
               CAST(SUM(CASE WHEN Has_Patents = 1 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN Has_Patents = 1 THEN 1 ELSE 0 END),0) AS funded_rate_patent,
               CAST(SUM(CASE WHEN Has_Patents = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN Has_Patents = 0 THEN 1 ELSE 0 END),0) AS funded_rate_no_patent
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT COALESCE(CAST(Has_Patents AS NVARCHAR(10)),'Unknown') AS has_patent, COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            SELECT COALESCE(CAST(Has_Patents AS TEXT),'Unknown') AS has_patent, COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY COALESCE(CAST(Has_Patents AS NVARCHAR(10)),'Unknown');
         """,
@@ -303,13 +303,13 @@ MYTHS = [
               SUM(CASE WHEN (SKUs <= 20 OR SKUs IS NULL) AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_low_skus,
               CAST(SUM(CASE WHEN SKUs > 20 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN SKUs > 20 THEN 1 ELSE 0 END),0) AS funded_rate_high_skus,
               CAST(SUM(CASE WHEN (SKUs <= 20 OR SKUs IS NULL) AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN (SKUs <= 20 OR SKUs IS NULL) THEN 1 ELSE 0 END),0) AS funded_rate_low_skus
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN SKUs IS NULL THEN 'Unknown' WHEN SKUs < 5 THEN '<5' WHEN SKUs BETWEEN 5 AND 20 THEN '5-20' ELSE '20+' END AS skus_bucket,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN SKUs IS NULL THEN 'Unknown' WHEN SKUs < 5 THEN '<5' WHEN SKUs BETWEEN 5 AND 20 THEN '5-20' ELSE '20+' END;
         """,
@@ -329,12 +329,12 @@ MYTHS = [
               SUM(CASE WHEN bootstrapped=0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_nonboot,
               CAST(SUM(CASE WHEN bootstrapped=1 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN bootstrapped=1 THEN 1 ELSE 0 END),0) AS funded_rate_boot,
               CAST(SUM(CASE WHEN bootstrapped=0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN bootstrapped=0 THEN 1 ELSE 0 END),0) AS funded_rate_nonboot
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT COALESCE(CAST(bootstrapped AS NVARCHAR(10)),'Unknown') AS bootstrapped, COUNT(*) AS cnt, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            SELECT COALESCE(CAST(bootstrapped AS TEXT),'Unknown') AS bootstrapped, COUNT(*) AS cnt, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY COALESCE(CAST(bootstrapped AS NVARCHAR(10)),'Unknown');
         """,
@@ -348,21 +348,21 @@ MYTHS = [
         "context": "Compare closure rate for royalty deals vs equity-only (we do not assume a 'total_debt' column).",
         "check_sql": """
             SELECT
-              SUM(CASE WHEN ISNULL(royalty_percentage,0) > 0 THEN 1 ELSE 0 END) AS total_royalty,
-              SUM(CASE WHEN ISNULL(royalty_percentage,0) > 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed_royalty,
-              SUM(CASE WHEN ISNULL(royalty_percentage,0) = 0 THEN 1 ELSE 0 END) AS total_equity_only,
-              SUM(CASE WHEN ISNULL(royalty_percentage,0) = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed_equity_only,
-              CAST(SUM(CASE WHEN ISNULL(royalty_percentage,0) > 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN ISNULL(royalty_percentage,0) > 0 THEN 1 ELSE 0 END),0) AS closure_rate_royalty,
-              CAST(SUM(CASE WHEN ISNULL(royalty_percentage,0) = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN ISNULL(royalty_percentage,0) = 0 THEN 1 ELSE 0 END),0) AS closure_rate_equity
-            FROM dbo.deals
+              SUM(CASE WHEN COALESCE(royalty_percentage,0) > 0 THEN 1 ELSE 0 END) AS total_royalty,
+              SUM(CASE WHEN COALESCE(royalty_percentage,0) > 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed_royalty,
+              SUM(CASE WHEN COALESCE(royalty_percentage,0) = 0 THEN 1 ELSE 0 END) AS total_equity_only,
+              SUM(CASE WHEN COALESCE(royalty_percentage,0) = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed_equity_only,
+              CAST(SUM(CASE WHEN COALESCE(royalty_percentage,0) > 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN COALESCE(royalty_percentage,0) > 0 THEN 1 ELSE 0 END),0) AS closure_rate_royalty,
+              CAST(SUM(CASE WHEN COALESCE(royalty_percentage,0) = 0 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN COALESCE(royalty_percentage,0) = 0 THEN 1 ELSE 0 END),0) AS closure_rate_equity
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT CASE WHEN ISNULL(royalty_percentage,0) > 0 THEN 'Royalty' ELSE 'Equity-only' END AS instrument,
+            SELECT CASE WHEN COALESCE(royalty_percentage,0) > 0 THEN 'Royalty' ELSE 'Equity-only' END AS instrument,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS closed
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
-            GROUP BY CASE WHEN ISNULL(royalty_percentage,0) > 0 THEN 'Royalty' ELSE 'Equity-only' END;
+            GROUP BY CASE WHEN COALESCE(royalty_percentage,0) > 0 THEN 'Royalty' ELSE 'Equity-only' END;
         """,
         "explainer": "Compares closure likelihood for royalty-including deals vs straight equity-only deals (no debt column used).",
         "explorer_prefill": {}
@@ -375,8 +375,8 @@ MYTHS = [
         "check_sql": """
             WITH inv_sector AS (
               SELECT di.investor, COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS cnt
-              FROM dbo.deal_investors di
-              JOIN dbo.deals d ON di.deal_id = d.id
+              FROM deal_investors di
+              JOIN deals d ON di.deal_id = d.id
               GROUP BY di.investor, COALESCE(d.sector,'Unknown')
             ), inv_tot AS (
               SELECT investor, SUM(cnt) AS total FROM inv_sector GROUP BY investor
@@ -394,7 +394,7 @@ MYTHS = [
         """,
         "plot_sql": """
             SELECT TOP 50 investor_a, investor_b, together_count
-            FROM dbo.vw_co_invest_pairs
+            FROM vw_co_invest_pairs
             ORDER BY together_count DESC;
         """,
         "explainer": "Finds whether any shark has a sector concentration exceeding 50% of their deals.",
@@ -407,9 +407,9 @@ MYTHS = [
         "context": "Compare the top investor by total invested vs the top by average ticket.",
         "check_sql": """
             WITH invs AS (
-              SELECT di.investor, SUM(ISNULL(d.invested_amount,0)) AS total_inv, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
-              FROM dbo.deal_investors di
-              JOIN dbo.deals d ON di.deal_id = d.id
+              SELECT di.investor, SUM(COALESCE(d.invested_amount,0)) AS total_inv, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
+              FROM deal_investors di
+              JOIN deals d ON di.deal_id = d.id
               GROUP BY di.investor
             ), top_total AS (
               SELECT TOP 1 investor AS top_by_total FROM invs ORDER BY total_inv DESC
@@ -419,9 +419,9 @@ MYTHS = [
             SELECT (SELECT top_by_total FROM top_total) AS top_by_total, (SELECT top_by_avg FROM top_avg) AS top_by_avg;
         """,
         "plot_sql": """
-            SELECT TOP 15 di.investor, SUM(ISNULL(d.invested_amount,0)) AS total_invested, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
-            FROM dbo.deal_investors di
-            JOIN dbo.deals d ON di.deal_id = d.id
+            SELECT TOP 15 di.investor, SUM(COALESCE(d.invested_amount,0)) AS total_invested, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
+            FROM deal_investors di
+            JOIN deals d ON di.deal_id = d.id
             GROUP BY di.investor
             ORDER BY total_invested DESC;
         """,
@@ -441,13 +441,13 @@ MYTHS = [
               SUM(CASE WHEN (gross_margin < 50 OR gross_margin IS NULL) AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_low_margin,
               CAST(SUM(CASE WHEN gross_margin >= 50 AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN gross_margin >= 50 THEN 1 ELSE 0 END),0) AS funded_rate_high_margin,
               CAST(SUM(CASE WHEN (gross_margin < 50 OR gross_margin IS NULL) AND invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT)/NULLIF(SUM(CASE WHEN (gross_margin < 50 OR gross_margin IS NULL) THEN 1 ELSE 0 END),0) AS funded_rate_low_margin
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
             SELECT CASE WHEN gross_margin IS NULL THEN 'Unknown' WHEN gross_margin >= 50 THEN '>=50%' ELSE '<50%' END AS margin_bucket,
                    COUNT(*) AS pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded
-            FROM dbo.deals
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY CASE WHEN gross_margin IS NULL THEN 'Unknown' WHEN gross_margin >= 50 THEN '>=50%' ELSE '<50%' END;
         """,
@@ -461,8 +461,8 @@ MYTHS = [
         "context": "Compute share of total invested capital represented by the top 5 sectors (values in lakhs).",
         "check_sql": """
             WITH sector_sums AS (
-              SELECT COALESCE(sector,'Unknown') AS sector, SUM(ISNULL(invested_amount,0)) AS total_invested
-              FROM dbo.deals
+              SELECT COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested
+              FROM deals
               WHERE (:season = 'All' OR season = :season)
               GROUP BY COALESCE(sector,'Unknown')
             ), ranked AS (
@@ -477,8 +477,8 @@ MYTHS = [
             ;
         """,
         "plot_sql": """
-            SELECT TOP 10 COALESCE(sector,'Unknown') AS sector, SUM(ISNULL(invested_amount,0)) AS total_invested
-            FROM dbo.deals
+            SELECT TOP 10 COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY COALESCE(sector,'Unknown')
             ORDER BY total_invested DESC;
@@ -494,7 +494,7 @@ MYTHS = [
         "check_sql": """
             WITH season_avg AS (
               SELECT COALESCE(season,'Unknown') AS season, AVG(NULLIF(invested_amount,0)) AS avg_ticket
-              FROM dbo.deals
+              FROM deals
               GROUP BY COALESCE(season,'Unknown')
             )
             SELECT MIN(season) AS first_season, MAX(season) AS last_season,
@@ -504,7 +504,7 @@ MYTHS = [
         """,
         "plot_sql": """
             SELECT COALESCE(season,'Unknown') AS season, AVG(NULLIF(invested_amount,0)) AS avg_ticket
-            FROM dbo.deals
+            FROM deals
             GROUP BY COALESCE(season,'Unknown')
             ORDER BY season;
         """,
@@ -518,17 +518,17 @@ MYTHS = [
         "context": "Compare avg invested_amount where advisory_shares_equity > 0 vs = 0 (values in lakhs).",
         "check_sql": """
             SELECT
-              AVG(CASE WHEN ISNULL(advisory_shares_equity,0) > 0 THEN ISNULL(invested_amount,0) END) AS avg_with_advisory,
-              AVG(CASE WHEN ISNULL(advisory_shares_equity,0) = 0 THEN ISNULL(invested_amount,0) END) AS avg_without_advisory
-            FROM dbo.deals
+              AVG(CASE WHEN COALESCE(advisory_shares_equity,0) > 0 THEN COALESCE(invested_amount,0) END) AS avg_with_advisory,
+              AVG(CASE WHEN COALESCE(advisory_shares_equity,0) = 0 THEN COALESCE(invested_amount,0) END) AS avg_without_advisory
+            FROM deals
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT CASE WHEN ISNULL(advisory_shares_equity,0) > 0 THEN 'Has advisory' ELSE 'No advisory' END AS advisory_flag,
-                   COUNT(*) AS pitches, AVG(ISNULL(invested_amount,0)) AS avg_invested
-            FROM dbo.deals
+            SELECT CASE WHEN COALESCE(advisory_shares_equity,0) > 0 THEN 'Has advisory' ELSE 'No advisory' END AS advisory_flag,
+                   COUNT(*) AS pitches, AVG(COALESCE(invested_amount,0)) AS avg_invested
+            FROM deals
             WHERE (:season = 'All' OR season = :season)
-            GROUP BY CASE WHEN ISNULL(advisory_shares_equity,0) > 0 THEN 'Has advisory' ELSE 'No advisory' END;
+            GROUP BY CASE WHEN COALESCE(advisory_shares_equity,0) > 0 THEN 'Has advisory' ELSE 'No advisory' END;
         """,
         "explainer": "Checks whether offering advisory equity is associated with larger investments (amounts in lakhs).",
         "explorer_prefill": {}
@@ -604,9 +604,9 @@ def evaluate_myth(myth_id, df_check):
         if myth_id == "myth05":
             fr = _safe_num(r.get("funded_rate_female_only", 0.0))
             mr = _safe_num(r.get("funded_rate_male_only", 0.0))
-            vf = "True" if fr < mr else "False"
-            expl = f"Female-only funded rate {_pct_str(fr)} vs Male-only {_pct_str(mr)}. Verdict: {vf}."
-            return vf, expl
+            verdict = "True" if fr < mr else "False"
+            expl = f"Female-only funded rate {_pct_str(fr)} vs Male-only {_pct_str(mr)}. Verdict: {verdict}."
+            return verdict, expl
 
         if myth_id == "myth06":
                 avg_multi = _safe_num(r.get("avg_multi", 0.0))
