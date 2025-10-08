@@ -133,8 +133,8 @@ Each myth includes:
 
 **Sumer Pandey**  
 🔗 [LinkedIn](https://www.linkedin.com/in/sumerpandey/)  
-💻 [GitHub](https://github.com/being-sumer)  
-📧 sumerpandey@example.com  
+💻 [GitHub](https://github.com/sumer-oandey)  
+📧 workmailsumer@gmail.com 
 
 ---
 
