@@ -1,0 +1,46 @@
+# CITATION.cff
+cff-version: 1.2.0
+message: "If you use Shark Catalyst or any of its analyses, please cite it as below."
+title: "Shark Catalyst: Interactive Analytics Platform for the Indian Startup Ecosystem"
+authors:
+  - family-names: Pandey
+    given-names: Sumer
+    orcid: "https://orcid.org/0000-0003-2025-XXXX"   # optional, replace with your ORCID if you have one
+affiliation: "Independent Researcher"
+date-released: 2025-10-08
+version: "1.0.0"
+repository-code: "https://github.com/being-sumer/sharktank-app"
+abstract: >
+  Shark Catalyst is an interactive, evidence-based analytics platform
+  built using Streamlit and SQL for deep data exploration of the Indian startup ecosystem.
+  It reproduces, visualizes, and statistically tests key investment patterns and myths
+  using the public Shark Tank India dataset by Thirumani (Kaggle).
+identifiers:
+  - type: url
+    value: "https://shark-catalyst.streamlit.app"   # replace with your live Streamlit app URL
+  - type: doi
+    value: "10.5281/zenodo.XXXXXXX"                  # optional, once you upload to Zenodo
+keywords:
+  - Shark Tank India
+  - Venture Analytics
+  - Investment Analysis
+  - SQL Evidence Framework
+  - Streamlit
+  - Startup Ecosystem
+license: "MIT"
+type: software
+contact:
+  - name: Sumer Pandey
+    email: "your.email@example.com"                  # replace with your contact
+    website: "https://www.linkedin.com/in/sumerpandey/"
+preferred-citation:
+  type: software
+  title: "Shark Catalyst: Evidence-based Analytics on the Indian Startup Ecosystem"
+  authors:
+    - family-names: Pandey
+      given-names: Sumer
+  year: 2025
+  url: "https://github.com/being-sumer/sharktank-app"
+  notes: >
+    Data source: Kaggle dataset "Shark Tank India" by Thirumani.
+    Analytical work © 2025 Sumer Pandey, distributed under MIT License.
