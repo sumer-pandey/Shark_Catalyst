@@ -59,9 +59,9 @@ def page_trends(filters):
            SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_count,
            1.0 * SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(COUNT(1),0) AS funded_rate,
            AVG(NULLIF(invested_amount,0)) AS avg_ticket,
-           SUM(ISNULL(invested_amount,0)) AS total_invested,
+           SUM(COALESCE(invested_amount,0)) AS total_invested,
            AVG(equity_final) AS avg_equity
-    FROM dbo.deals
+    FROM deals
     WHERE (:season = 'All' OR season = :season)
     GROUP BY COALESCE(season,'Unknown')
     ORDER BY season;
@@ -128,7 +128,7 @@ def page_trends(filters):
     try:
         sql_sector_season = """
         SELECT COALESCE(sector,'Unknown') AS sector, COALESCE(season,'Unknown') AS season, COUNT(1) AS deals_count
-        FROM dbo.deals
+        FROM deals
         WHERE (:season = 'All' OR season = :season)
         GROUP BY COALESCE(sector,'Unknown'), COALESCE(season,'Unknown')
         ORDER BY sector, season;
@@ -164,9 +164,9 @@ def page_trends(filters):
             ELSE 'Other'
           END AS product_service,
           COUNT(1) AS deals_count,
-          SUM(ISNULL(invested_amount,0)) AS total_invested,
+          SUM(COALESCE(invested_amount,0)) AS total_invested,
           AVG(NULLIF(invested_amount,0)) AS avg_ticket
-        FROM dbo.deals
+        FROM deals
         WHERE (:season = 'All' OR season = :season)
         GROUP BY
           CASE
@@ -208,9 +208,9 @@ def page_trends(filters):
     try:
         # Fetch raw investor rows joined with deal invested_amount and deal id
         inv_raw = cached_query("""
-            SELECT di.investor AS investor_raw, ISNULL(d.invested_amount,0) AS invested_amount, d.id AS deal_id
-            FROM dbo.deal_investors di
-            JOIN dbo.deals d ON di.deal_id = d.id
+            SELECT di.investor AS investor_raw, COALESCE(d.invested_amount,0) AS invested_amount, d.id AS deal_id
+            FROM deal_investors di
+            JOIN deals d ON di.deal_id = d.id
             WHERE d.invested_amount IS NOT NULL;
         """)
         if inv_raw is None or inv_raw.empty:
@@ -253,7 +253,7 @@ def page_trends(filters):
     # -------------------------
     st.markdown(f"<h3 style='color:{ACCENT}'>Ticket Size Distributions</h3>", unsafe_allow_html=True)
     try:
-        dd = cached_query("SELECT invested_amount FROM dbo.deals WHERE invested_amount IS NOT NULL")
+        dd = cached_query("SELECT invested_amount FROM deals WHERE invested_amount IS NOT NULL")
         if dd is None or dd.empty:
             st.info("No invested amount values available.")
         else:
@@ -279,9 +279,9 @@ def page_trends(filters):
     try:
         hhi_sql = """
         WITH inv_sum AS (
-          SELECT d.season, di.investor, SUM(ISNULL(d.invested_amount,0)) AS inv_total
-          FROM dbo.deal_investors di
-          JOIN dbo.deals d ON di.deal_id = d.id
+          SELECT d.season, di.investor, SUM(COALESCE(d.invested_amount,0)) AS inv_total
+          FROM deal_investors di
+          JOIN deals d ON di.deal_id = d.id
           GROUP BY d.season, di.investor
         ), season_totals AS (
           SELECT season, SUM(inv_total) AS season_total FROM inv_sum GROUP BY season
@@ -289,7 +289,7 @@ def page_trends(filters):
           SELECT i.season, i.investor, i.inv_total, i.inv_total / NULLIF(st.season_total,0) AS share
           FROM inv_sum i JOIN season_totals st ON i.season = st.season
         )
-        SELECT season, SUM(POWER(share,2)) AS hhi
+        SELECT season, SUM(share * share)) AS hhi
         FROM shares
         GROUP BY season
         ORDER BY season;
@@ -326,7 +326,7 @@ def page_trends(filters):
           SELECT COALESCE(sector,'Unknown') AS sector, COALESCE(season,'Unknown') AS season, invested_amount,
                  ROW_NUMBER() OVER (PARTITION BY COALESCE(sector,'Unknown'), COALESCE(season,'Unknown') ORDER BY invested_amount) AS rn,
                  COUNT(*) OVER (PARTITION BY COALESCE(sector,'Unknown'), COALESCE(season,'Unknown')) AS cnt
-          FROM dbo.deals
+          FROM deals
           WHERE invested_amount IS NOT NULL
         )
         SELECT sector, season, AVG(CAST(invested_amount AS FLOAT)) AS median_invested
@@ -363,10 +363,10 @@ def page_trends(filters):
     st.markdown(f"<h3 style='color:{ACCENT}'>Actionable Insights</h3>", unsafe_allow_html=True)
     try:
         top_sector = cached_query("""
-            SELECT TOP 1 COALESCE(sector,'Unknown') AS sector, SUM(ISNULL(invested_amount,0)) AS total_invested
-            FROM dbo.deals
+            SELECT COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested
+            FROM deals
             GROUP BY COALESCE(sector,'Unknown')
-            ORDER BY total_invested DESC;
+            ORDER BY total_invested DESC LIMIT 1;
         """)
         if top_sector is not None and not top_sector.empty:
             s = top_sector.iloc[0]
@@ -374,9 +374,9 @@ def page_trends(filters):
 
         # compute investor with highest avg ticket robustly (explode combined names)
         inv_raw = cached_query("""
-            SELECT di.investor AS investor_raw, ISNULL(d.invested_amount,0) AS invested_amount, d.id AS deal_id
-            FROM dbo.deal_investors di
-            JOIN dbo.deals d ON di.deal_id = d.id
+            SELECT di.investor AS investor_raw, COALESCE(d.invested_amount,0) AS invested_amount, d.id AS deal_id
+            FROM deal_investors di
+            JOIN deals d ON di.deal_id = d.id
             WHERE d.invested_amount IS NOT NULL;
         """)
         if inv_raw is not None and not inv_raw.empty:
