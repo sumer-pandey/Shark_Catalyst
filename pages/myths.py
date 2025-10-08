@@ -206,9 +206,9 @@ MYTHS = [
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT TOP 200 equity_asked, equity_final FROM deals
+            SELECT equity_asked, equity_final FROM deals
             WHERE equity_asked IS NOT NULL AND (:season = 'All' OR season = :season)
-            ORDER BY equity_asked DESC;
+            ORDER BY equity_asked DESC LIMIT 200;
         """,
         "explainer": "If average final equity exceeds average asked equity, founders on average conceded more ownership.",
         "explorer_prefill": {}
@@ -226,10 +226,10 @@ MYTHS = [
             WHERE (:season = 'All' OR season = :season);
         """,
         "plot_sql": """
-            SELECT TOP 200 asked_amount AS asked_lakhs, invested_amount AS invested_lakhs, equity_asked, equity_final
+            SELECT asked_amount AS asked_lakhs, invested_amount AS invested_lakhs, equity_asked, equity_final
             FROM deals
             WHERE (:season = 'All' OR season = :season)
-            ORDER BY asked_amount DESC;
+            ORDER BY asked_amount DESC LIMIT 200;
         """,
         "explainer": "Checks whether deals implied valuations that are lower than founders' asks (values are in lakhs).",
         "explorer_prefill": {}
@@ -393,9 +393,12 @@ MYTHS = [
             WHERE max_share > 0.50;
         """,
         "plot_sql": """
-            SELECT TOP 50 investor_a, investor_b, together_count
-            FROM vw_co_invest_pairs
-            ORDER BY together_count DESC;
+            SELECT COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS deals
+            FROM deal_investors di
+            JOIN deals d ON di.deal_id = d.id
+            WHERE (:season = 'All' OR d.season = :season)
+            GROUP BY COALESCE(d.sector,'Unknown')
+            ORDER BY deals DESC LIMIT 10;
         """,
         "explainer": "Finds whether any shark has a sector concentration exceeding 50% of their deals.",
         "explorer_prefill": {}
@@ -412,18 +415,18 @@ MYTHS = [
               JOIN deals d ON di.deal_id = d.id
               GROUP BY di.investor
             ), top_total AS (
-              SELECT TOP 1 investor AS top_by_total FROM invs ORDER BY total_inv DESC
+              SELECT investor AS top_by_total FROM invs ORDER BY total_inv DESC LIMIT 1
             ), top_avg AS (
-              SELECT TOP 1 investor AS top_by_avg FROM invs ORDER BY avg_ticket DESC
+              SELECT investor AS top_by_avg FROM invs ORDER BY avg_ticket DESC LIMIT 1
             )
             SELECT (SELECT top_by_total FROM top_total) AS top_by_total, (SELECT top_by_avg FROM top_avg) AS top_by_avg;
-        """,
+        """, # <--- TOP 1 REPLACED with LIMIT 1 in two places
         "plot_sql": """
-            SELECT TOP 15 di.investor, SUM(COALESCE(d.invested_amount,0)) AS total_invested, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
+            SELECT di.investor, SUM(COALESCE(d.invested_amount,0)) AS total_invested, AVG(NULLIF(d.invested_amount,0)) AS avg_ticket
             FROM deal_investors di
             JOIN deals d ON di.deal_id = d.id
             GROUP BY di.investor
-            ORDER BY total_invested DESC;
+            ORDER BY total_invested DESC LIMIT 15; # <--- TOP 15 REPLACED with LIMIT 15
         """,
         "explainer": "Verifies if the largest capital provider is also the one writing the largest average cheques.",
         "explorer_prefill": {}
@@ -477,11 +480,11 @@ MYTHS = [
             ;
         """,
         "plot_sql": """
-            SELECT TOP 10 COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested
+            SELECT COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested
             FROM deals
             WHERE (:season = 'All' OR season = :season)
             GROUP BY COALESCE(sector,'Unknown')
-            ORDER BY total_invested DESC;
+            ORDER BY total_invested DESC LIMIT 10;
         """,
         "explainer": "Measures capital concentration across sectors (top 5 vs total; values in lakhs).",
         "explorer_prefill": {}
@@ -724,6 +727,23 @@ def evaluate_myth(myth_id, df_check):
     return "False", "Could not evaluate (default False)."
 
 
+# Insert this new function into pages/myths.py
+def get_co_invest_pairs():
+    # Load all deal-investor data
+    # NOTE: This assumes 'deal_investors' table and its column names are correct (deal_id, investor)
+    df_inv = cached_query("SELECT deal_id, investor FROM deal_investors WHERE investor IS NOT NULL")
+    
+    # Self-join to find pairs of investors on the same deal
+    df_pairs = pd.merge(df_inv, df_inv, on='deal_id', suffixes=('_a', '_b'))
+    
+    # Filter for unique pairs (Investor A < Investor B to avoid duplicates and self-joins)
+    df_pairs = df_pairs = df_pairs[df_pairs['investor_a'] < df_pairs['investor_b']]
+
+    # Count how many times they co-invested
+    df_result = df_pairs.groupby(['investor_a', 'investor_b']).size().reset_index(name='together_count')
+    
+    return df_result.sort_values('together_count', ascending=False)
+
 # ----------------------
 # Page main
 # ----------------------
@@ -794,25 +814,38 @@ def page_myths(filters):
         else:
             st.write("Interpretation: dataset does not support the myth under our deterministic rule. This suggests the myth is likely false for this dataset; consider edge cases or season-specific behavior.")
 
+    # ... inside def page_myths(filters):
     with cols[1]:
         # st.markdown("### Evidence")
         st.markdown("<h3 style='text-align: center;'>Evidence</h3>", unsafe_allow_html=True)
         try:
-            df_plot = cached_query(myth['plot_sql'], {"season": season})
+            # --- START MODIFICATION HERE ---
+            if myth['id'] == 'myth15':
+                # Use Python logic for co-investor pairs and take the top 50
+                df_plot = get_co_invest_pairs().head(50)
+                # Override plot title for clarity
+                plot_title = "Top 50 Co-Investing Pairs"
+            else:
+                df_plot = cached_query(myth['plot_sql'], {"season": season})
+                plot_title = None
+            # --- END MODIFICATION HERE ---
+            
             if df_plot is not None and not df_plot.empty:
                 # If plot has 'funded' and 'pitches', show funded rate bar
                 if 'funded' in df_plot.columns and 'pitches' in df_plot.columns:
                     df_plot = df_plot.copy()
                     df_plot['funded_rate'] = df_plot['funded'] / df_plot['pitches'].replace({0: None})
                     x_col = df_plot.columns[0]
-                    fig = px.bar(df_plot, x=x_col, y='funded_rate', title="Funded rate by bucket", labels={'funded_rate':'Funded rate', x_col:x_col})
+                    # Update fig title here:
+                    fig = px.bar(df_plot, x=x_col, y='funded_rate', title=plot_title or "Funded rate by bucket", labels={'funded_rate':'Funded rate', x_col:x_col})
                     st.plotly_chart(fig, use_container_width=True)
                     st.dataframe(df_plot)
                 else:
                     # fallback: plot first numeric column
                     numeric_cols = [c for c in df_plot.columns if pd.api.types.is_numeric_dtype(df_plot[c])]
                     if numeric_cols:
-                        fig = px.bar(df_plot, x=df_plot.columns[0], y=numeric_cols[0], title=f"{numeric_cols[0]} by {df_plot.columns[0]}")
+                        # Update fig title here:
+                        fig = px.bar(df_plot, x=df_plot.columns[0], y=numeric_cols[0], title=plot_title or f"{numeric_cols[0]} by {df_plot.columns[0]}")
                         st.plotly_chart(fig, use_container_width=True)
                         st.dataframe(df_plot)
                     else:
@@ -821,6 +854,36 @@ def page_myths(filters):
                 st.info("No evidence data available for this myth (dataset may be missing required fields).")
         except Exception as e:
             st.warning("Evidence SQL failed: " + str(e))
+
+   # Old section just for safety
+
+    # with cols[1]:
+    #     # st.markdown("### Evidence")
+    #     st.markdown("<h3 style='text-align: center;'>Evidence</h3>", unsafe_allow_html=True)
+    #     try:
+    #         df_plot = cached_query(myth['plot_sql'], {"season": season})
+    #         if df_plot is not None and not df_plot.empty:
+    #             # If plot has 'funded' and 'pitches', show funded rate bar
+    #             if 'funded' in df_plot.columns and 'pitches' in df_plot.columns:
+    #                 df_plot = df_plot.copy()
+    #                 df_plot['funded_rate'] = df_plot['funded'] / df_plot['pitches'].replace({0: None})
+    #                 x_col = df_plot.columns[0]
+    #                 fig = px.bar(df_plot, x=x_col, y='funded_rate', title="Funded rate by bucket", labels={'funded_rate':'Funded rate', x_col:x_col})
+    #                 st.plotly_chart(fig, use_container_width=True)
+    #                 st.dataframe(df_plot)
+    #             else:
+    #                 # fallback: plot first numeric column
+    #                 numeric_cols = [c for c in df_plot.columns if pd.api.types.is_numeric_dtype(df_plot[c])]
+    #                 if numeric_cols:
+    #                     fig = px.bar(df_plot, x=df_plot.columns[0], y=numeric_cols[0], title=f"{numeric_cols[0]} by {df_plot.columns[0]}")
+    #                     st.plotly_chart(fig, use_container_width=True)
+    #                     st.dataframe(df_plot)
+    #                 else:
+    #                     st.dataframe(df_plot)
+    #         else:
+    #             st.info("No evidence data available for this myth (dataset may be missing required fields).")
+    #     except Exception as e:
+    #         st.warning("Evidence SQL failed: " + str(e))
 
 
     # st.markdown("---")
