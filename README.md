@@ -49,8 +49,6 @@ All results in the **Evidence-Based Myth Analysis** section are powered by SQL s
 ## 🧩 Project Structure
 
 <pre><code>
-<div align="left">
-
 shark-catalyst/
 ├── app.py # Main Streamlit app entry point
 ├── utils/ # Shared utility functions (cache, formatting, styling)
@@ -67,8 +65,6 @@ shark-catalyst/
 ├── .env.example # Sample environment variable template
 ├── .gitignore
 └── README.md
-
-</div>
 </code></pre>
 ---
 
