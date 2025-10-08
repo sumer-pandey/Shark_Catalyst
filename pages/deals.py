@@ -6,7 +6,7 @@ import pandas as pd
 st.set_page_config(layout="wide")
 
 def _get_min_max(column, season):
-    row = cached_query(f"SELECT MIN({column}) AS mn, MAX({column}) AS mx FROM dbo.deals WHERE (:season = 'All' OR season = :season)", {"season": season})
+    row = cached_query(f"SELECT MIN({column}) AS mn, MAX({column}) AS mx FROM deals WHERE (:season = 'All' OR season = :season)", {"season": season})
     if row is None or row.empty:
         return 0, 0
     return (row.iloc[0].mn or 0), (row.iloc[0].mx or 0)
@@ -58,13 +58,13 @@ def page_deals(filters):
         sel_season = cols1[0].selectbox("Season (repeat)", seasons_opts, index=sel_season_default_index)
 
         # Sectors
-        sectors_df = cached_query("SELECT DISTINCT sector FROM dbo.deals WHERE sector IS NOT NULL ORDER BY sector")
+        sectors_df = cached_query("SELECT DISTINCT sector FROM deals WHERE sector IS NOT NULL ORDER BY sector")
         sector_opts = sectors_df['sector'].dropna().tolist() if not sectors_df.empty else []
         sel_sectors_default = prefill.get("sectors", []) if prefill and "sectors" in prefill else []
         sel_sectors = cols1[1].multiselect("Sector (multi)", options=sector_opts, default=sel_sectors_default)
 
         # Investors — fix: split comma-separated values into individual names and sort
-        inv_raw_df = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors WHERE investor IS NOT NULL ORDER BY investor")
+        inv_raw_df = cached_query("SELECT DISTINCT investor FROM deal_investors WHERE investor IS NOT NULL ORDER BY investor")
         inv_opts = []
         try:
             if not inv_raw_df.empty:
@@ -112,7 +112,7 @@ def page_deals(filters):
         sel_city_type = cols2[2].selectbox("City type", ["All", "Metro", "Non-metro"], index=["All","Metro","Non-metro"].index(sel_city_type_default))
 
         # min founder count
-        max_founders_row = cached_query("SELECT MAX(ISNULL(founder_count,0)) AS mx FROM dbo.deals")
+        max_founders_row = cached_query("SELECT MAX(COALESCE(founder_count,0)) AS mx FROM deals")
         max_founders = int(max_founders_row.iloc[0].mx or 5) if not max_founders_row.empty else 5
         sel_min_founder_default = int(prefill.get("min_founder_count", 0)) if prefill else 0
         sel_min_founder = cols2[3].slider("Min founder count", 0, max(10, max_founders), sel_min_founder_default, step=1)
@@ -172,9 +172,12 @@ def page_deals(filters):
 
     # call server-side stored proc
     try:
-        df = cached_query(
-            "EXEC dbo.sp_deals_search_ext @season = :season, @sector_csv = :sector_csv, @investor_csv = :investor_csv, @min_invested = :min_inv, @max_invested = :max_inv, @funded_flag = :funded_flag, @city_type = :city_type, @min_founder_count = :min_founder, @female_flag = :female_flag, @sort_by = :sort_by, @sort_dir = :sort_dir, @limit = :limit, @offset = :offset",
+        df = cached_query(		
+            "SELECT * FROM deals WHERE (:season = 'All' OR season = :season) ORDER BY :sort_by :sort_dir LIMIT :limit OFFSET :offset",		
             {
+        # df = cached_query(
+        #     "EXEC dbo.sp_deals_search_ext @season = :season, @sector_csv = :sector_csv, @investor_csv = :investor_csv, @min_invested = :min_inv, @max_invested = :max_inv, @funded_flag = :funded_flag, @city_type = :city_type, @min_founder_count = :min_founder, @female_flag = :female_flag, @sort_by = :sort_by, @sort_dir = :sort_dir, @limit = :limit, @offset = :offset",
+        #     {
                 "season": sel_season,
                 "sector_csv": sector_csv,
                 "investor_csv": investor_csv,
@@ -203,11 +206,13 @@ def page_deals(filters):
     if not df.empty:
         ids = df['id'].astype(int).tolist()
         ids_csv = ",".join(str(int(x)) for x in ids)
-        inv_sql = f"""
-        SELECT d.id as deal_id,
-          (SELECT STUFF((SELECT ',' + di2.investor FROM dbo.deal_investors di2 WHERE di2.deal_id = d.id FOR XML PATH('')),1,1,'')) AS investors
-        FROM dbo.deals d
-        WHERE d.id IN ({ids_csv});
+        inv_sql = f"""		
+        SELECT d.id as deal_id,		
+        GROUP_CONCAT(di2.investor, ', ') AS investors		
+        FROM deals d		
+        JOIN deal_investors di2 ON di2.deal_id = d.id		
+        WHERE d.id IN ({ids_csv})		
+        GROUP BY d.id;		
         """
         try:
             inv_map = cached_query(inv_sql)
@@ -296,7 +301,7 @@ def page_deals(filters):
 
         if selected_id:
             try:
-                detail_sql = "SELECT * FROM dbo.deals WHERE id = :did"
+                detail_sql = "SELECT * FROM deals WHERE id = :did"
                 detail = cached_query(detail_sql, {"did": int(selected_id)})
                 if not detail.empty:
                     d = detail.iloc[0].to_dict()
@@ -310,8 +315,11 @@ def page_deals(filters):
                     st.write(d.get('business_description','-'))
 
                     inv_sql2 = """
-                    SELECT STUFF((SELECT ',' + di2.investor FROM dbo.deal_investors di2 WHERE di2.deal_id = d.id FOR XML PATH('')),1,1,'') AS investors
-                    FROM dbo.deals d WHERE d.id = :did;
+                    SELECT GROUP_CONCAT(di2.investor, ', ') AS investors
+                    FROM deals d
+                    JOIN deal_investors di2 ON di2.deal_id = d.id
+                    WHERE d.id = :did
+                    GROUP BY d.id;
                     """
                     inv_row = cached_query(inv_sql2, {"did": int(selected_id)})
                     if not inv_row.empty:
@@ -320,7 +328,7 @@ def page_deals(filters):
                     sector = d.get('sector')
                     invested_amt = d.get('invested_amount') or 0
                     if sector:
-                        sim_df = cached_query("EXEC dbo.sp_similar_deals @sector = :sector, @target_amount = :amt, @limit = 5", {"sector": sector, "amt": invested_amt, "limit": 5})
+                        sim_df = cached_query("SELECT * FROM deals WHERE sector = :sector AND invested_amount BETWEEN :amt * 0.5 AND :amt * 1.5 AND id != :did LIMIT 5", {"sector": sector, "amt": invested_amt, "did": int(selected_id)})
                         st.subheader("Similar deals")
                         if not sim_df.empty:
                             # format similar deals columns
