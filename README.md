@@ -48,6 +48,7 @@ All results in the **Evidence-Based Myth Analysis** section are powered by SQL s
 
 ## 🧩 Project Structure
 
+<pre><code>
 <div align="left">
 
 shark-catalyst/
@@ -68,7 +69,7 @@ shark-catalyst/
 └── README.md
 
 </div>
-
+</code></pre>
 ---
 
 ## 📘 Key Analytical Modules
