@@ -20,7 +20,7 @@ def get_investors_list():
     Return a cleaned, deduplicated list of investor names.
 
     Strategy:
-    - Read distinct raw investor strings from dbo.deal_investors.
+    - Read distinct raw investor strings from deal_investors.
     - Split each raw string on common separators (comma, &, /, ;, ' and ').
     - Trim/normalize whitespace and discard empty parts.
     - Also union any normalized investor names from vw_investor_summary (if present).
@@ -30,7 +30,7 @@ def get_investors_list():
 
     # 1) Pull raw investor strings from deal_investors
     try:
-        df_raw = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors WHERE investor IS NOT NULL")
+        df_raw = cached_query("SELECT DISTINCT investor FROM deal_investors WHERE investor IS NOT NULL")
         if not df_raw.empty:
             for raw in df_raw['investor'].dropna().astype(str):
                 # split on ., comma, ampersand, slash, semicolon or the word ' and ' (case-insensitive)
@@ -45,7 +45,7 @@ def get_investors_list():
 
     # 2) Also include any canonical/normalized names from vw_investor_summary (if available)
     try:
-        df_vw = cached_query("SELECT DISTINCT investor FROM dbo.vw_investor_summary WHERE investor IS NOT NULL")
+        df_vw = cached_query("SELECT DISTINCT investor FROM vw_investor_summary WHERE investor IS NOT NULL")
         if not df_vw.empty:
             names.extend([x.strip() for x in df_vw['investor'].dropna().astype(str)])
     except Exception:
@@ -109,7 +109,7 @@ def page_investors(filters):
 
     # --- Summary KPIs (including median equity and top sector) ---
     try:
-        summary = cached_query("SELECT * FROM dbo.vw_investor_summary WHERE investor = :investor", {"investor": investor})
+        summary = cached_query("SELECT * FROM vw_investor_summary WHERE investor = :investor", {"investor": investor})
         if not summary.empty:
             r = summary.iloc[0]
             cols = st.columns(6)
@@ -146,9 +146,9 @@ def page_investors(filters):
           d.season,
           d.episode_number,
           COUNT(*) AS deals_count,
-          SUM(ISNULL(d.invested_amount,0)) AS total_invested
-        FROM dbo.deal_investors di
-        JOIN dbo.deals d ON di.deal_id = d.id
+          SUM(COALESCE(d.invested_amount,0)) AS total_invested
+        FROM deal_investors di
+        JOIN deals d ON di.deal_id = d.id
         WHERE di.investor = :investor
           AND (:season = 'All' OR d.season = :season)
         GROUP BY d.season, d.episode_number
@@ -197,9 +197,9 @@ def page_investors(filters):
     # --- Sector distribution (donut) ---
     try:
         sectors_sql = """
-        SELECT COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS deals_count, SUM(ISNULL(d.invested_amount,0)) AS total_invested
-        FROM dbo.deal_investors di
-        JOIN dbo.deals d ON di.deal_id = d.id
+        SELECT COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS deals_count, SUM(COALESCE(d.invested_amount,0)) AS total_invested
+        FROM deal_investors di
+        JOIN deals d ON di.deal_id = d.id
         WHERE di.investor = :investor
           AND (:season = 'All' OR d.season = :season)
         GROUP BY COALESCE(d.sector,'Unknown')
@@ -223,7 +223,7 @@ def page_investors(filters):
         # Fetch co-investor pairs where selected investor is part of the pair
         co_sql = """
         SELECT investor_a, investor_b, together_count
-        FROM dbo.vw_co_invest_pairs
+        FROM vw_co_invest_pairs
         WHERE investor_a = :investor OR investor_b = :investor
         ORDER BY together_count DESC;
         """
@@ -356,7 +356,7 @@ def page_investors(filters):
 
     try:
         # Avg ticket & median equity from vw_investor_summary (fallback compute if missing)
-        stats = cached_query("SELECT * FROM dbo.vw_investor_summary WHERE investor = :investor", {"investor": investor})
+        stats = cached_query("SELECT * FROM vw_investor_summary WHERE investor = :investor", {"investor": investor})
         if not stats.empty:
             s = stats.iloc[0]
             avg_ticket = s.avg_ticket if not pd.isnull(s.avg_ticket) else 0
@@ -367,8 +367,8 @@ def page_investors(filters):
             else:
                 rec_min, rec_max = 100000, 1000000
             pref_sql = """
-            SELECT TOP 3 COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(ISNULL(d.invested_amount,0)) AS total_invested
-            FROM dbo.deal_investors di JOIN dbo.deals d ON di.deal_id = d.id
+            SELECT COALESCE(d.sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(COALESCE(d.invested_amount,0)) AS total_invested LIMIT 3
+            FROM deal_investors di JOIN deals d ON di.deal_id = d.id
             WHERE di.investor = :investor
             GROUP BY COALESCE(d.sector,'Unknown')
             ORDER BY total_invested DESC;
@@ -376,18 +376,18 @@ def page_investors(filters):
             pref_df = cached_query(pref_sql, {"investor": investor})
             pref_sectors = pref_df['sector'].tolist() if not pref_df.empty else []
 
-            rev_sql = """
-            SELECT TOP 1
-            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY d.yearly_revenue) OVER () AS median_yearly
-            FROM dbo.deal_investors di
-            JOIN dbo.deals d ON di.deal_id = d.id
+            rev_data_sql = """
+            SELECT d.yearly_revenue
+            FROM deal_investors di
+            JOIN deals d ON di.deal_id = d.id
             WHERE di.investor = :investor AND d.yearly_revenue IS NOT NULL;
             """
-
-            rev_df = cached_query(rev_sql, {"investor": investor})
+            rev_df = cached_query(rev_data_sql, {"investor": investor})
+            
             median_yearly = None
-            if not rev_df.empty:
-                median_yearly = rev_df.iloc[0].median_yearly
+            if not rev_df.empty and 'yearly_revenue' in rev_df.columns:
+                # Use Pandas to calculate the median, replacing the complex SQL percentile function
+                median_yearly = rev_df['yearly_revenue'].median()
 
             cols = st.columns(2)
             with cols[0]:
@@ -414,9 +414,10 @@ def page_investors(filters):
     try:
         port_sql = """
         SELECT d.company, d.season, d.asked_amount, d.invested_amount, d.equity_final,
-          STUFF((SELECT ',' + di2.investor FROM dbo.deal_investors di2 WHERE di2.deal_id = d.id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'),1,1,'') AS investors
-        FROM dbo.deal_investors di
-        JOIN dbo.deals d ON di.deal_id = d.id
+          (SELECT GROUP_CONCAT(di2.investor, ',') FROM deal_investors di2 WHERE di2.deal_id = d.id) AS investors
+        #   STUFF((SELECT ',' + di2.investor FROM deal_investors di2 WHERE di2.deal_id = d.id FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'),1,1,'') AS investors
+        FROM deal_investors di
+        JOIN deals d ON di.deal_id = d.id
         WHERE di.investor = :investor
         ORDER BY d.invested_amount DESC;
         """
