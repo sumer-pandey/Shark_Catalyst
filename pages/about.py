@@ -38,7 +38,7 @@ def _get_clean_investors():
     """
     names = []
     try:
-        df_raw = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors WHERE investor IS NOT NULL")
+        df_raw = cached_query("SELECT DISTINCT investor FROM deal_investors WHERE investor IS NOT NULL")
         if not df_raw.empty:
             for raw in df_raw['investor'].dropna().astype(str):
                 # split on comma, ampersand, slash, semicolon or the word ' and ' (case-insensitive)
@@ -53,7 +53,7 @@ def _get_clean_investors():
 
     # also attempt to include canonical names from vw_investor_summary if available
     try:
-        df_vw = cached_query("SELECT DISTINCT investor FROM dbo.vw_investor_summary WHERE investor IS NOT NULL")
+        df_vw = cached_query("SELECT DISTINCT investor FROM vw_investor_summary WHERE investor IS NOT NULL")
         if not df_vw.empty:
             names.extend([x.strip() for x in df_vw['investor'].dropna().astype(str)])
     except Exception:
@@ -121,14 +121,14 @@ def page_about(filters):
 
     col1, col2 = st.columns(2)
     try:
-        deals_count_df = cached_query("SELECT COUNT(*) AS c FROM dbo.deals")
+        deals_count_df = cached_query("SELECT COUNT(*) AS c FROM deals")
         deals_count = int(deals_count_df.iloc[0]['c']) if not deals_count_df.empty else 0
         col1.metric("Deals (rows)", f"{deals_count:,}")
     except Exception:
         col1.metric("Deals (rows)", "N/A")
 
     try:
-        inv_count_df = cached_query("SELECT COUNT(*) AS c FROM dbo.deal_investors")
+        inv_count_df = cached_query("SELECT COUNT(*) AS c FROM deal_investors")
         inv_count = int(inv_count_df.iloc[0]['c']) if not inv_count_df.empty else 0
         col2.metric("Deal-Investor rows", f"{inv_count:,}")
     except Exception:
@@ -185,15 +185,15 @@ def page_about(filters):
 
     PRELOADED = {
         "Top sectors by invested (top N)": {
-            "sql": "SELECT TOP 100 COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(ISNULL(invested_amount,0)) AS total_invested FROM dbo.deals GROUP BY COALESCE(sector,'Unknown') ORDER BY total_invested DESC;",
+            "sql": "SELECT COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(COALESCE(invested_amount,0)) AS total_invested FROM deals GROUP BY COALESCE(sector,'Unknown') ORDER BY total_invested DESC LIMIT 100;",
             "params": []
         },
         "Top investors (by deals)": {
-            "sql": "SELECT TOP 100 di.investor, COUNT(*) AS deals_count, SUM(ISNULL(d.invested_amount,0)) AS total_invested FROM dbo.deal_investors di JOIN dbo.deals d ON di.deal_id = d.id GROUP BY di.investor ORDER BY deals_count DESC;",
+            "sql": "SELECT di.investor, COUNT(*) AS deals_count, SUM(COALESCE(d.invested_amount,0)) AS total_invested FROM deal_investors di JOIN deals d ON di.deal_id = d.id GROUP BY di.investor ORDER BY deals_count DESC LIMIT 100;",
             "params": []
         },
         "Recent deals (top 100)": {
-            "sql": "SELECT TOP 100 id, company, season, original_air_date, asked_amount, invested_amount, equity_final, pitchers_city, sector FROM dbo.deals ORDER BY original_air_date DESC;",
+            "sql": "SELECT id, company, season, original_air_date, asked_amount, invested_amount, equity_final, pitchers_city, sector FROM deals ORDER BY original_air_date DESC LIMIT 100;",
             "params": []
         },
         
@@ -203,8 +203,8 @@ def page_about(filters):
                 "  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY d.equity_final) OVER (PARTITION BY di.investor) AS median_equity,\n"
                 "  PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.equity_final) OVER (PARTITION BY di.investor) AS q1,\n"
                 "  PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.equity_final) OVER (PARTITION BY di.investor) AS q3\n"
-                "FROM dbo.deal_investors di\n"
-                "JOIN dbo.deals d ON di.deal_id = d.id\n"
+                "FROM deal_investors di\n"
+                "JOIN deals d ON di.deal_id = d.id\n"
                 "WHERE di.investor = :investor;"
             ),
             "params": ["investor"]
@@ -239,23 +239,24 @@ def page_about(filters):
         default_season = pre_params.get("season") if pre_params and "season" in pre_params else "All"
         params["season"] = st.selectbox("Season parameter", ["All","Season 1","Season 2","Season 3","Season 4"], index=0 if default_season=="All" else 0)
     if "investor" in selected["params"] or (pre_params and "investor" in pre_params):
+        investors_list = _get_clean_investors()
         investors_list = []
-        try:
-            # Read distinct raw investor strings
-            df_raw = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors WHERE investor IS NOT NULL")
-            names = []
-            if not df_raw.empty:
-                for raw in df_raw['investor'].dropna().astype(str):
-                    # Split on comma, ampersand, slash, semicolon, or the word 'and' (case-insensitive)
-                    parts = re.split(r',|&|/|;|\band\b', raw, flags=re.IGNORECASE)
-                    for p in parts:
-                        name = p.strip()
-                        if name:
-                            names.append(name)
-            # Deduplicate and sort case-insensitively
-            investors_list = sorted({n for n in names}, key=lambda s: s.lower())
-        except Exception:
-            investors_list = []
+        # try:
+        #     # Read distinct raw investor strings
+        #     df_raw = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors WHERE investor IS NOT NULL")
+        #     names = []
+        #     if not df_raw.empty:
+        #         for raw in df_raw['investor'].dropna().astype(str):
+        #             # Split on comma, ampersand, slash, semicolon, or the word 'and' (case-insensitive)
+        #             parts = re.split(r',|&|/|;|\band\b', raw, flags=re.IGNORECASE)
+        #             for p in parts:
+        #                 name = p.strip()
+        #                 if name:
+        #                     names.append(name)
+        #     # Deduplicate and sort case-insensitively
+        #     investors_list = sorted({n for n in names}, key=lambda s: s.lower())
+        # except Exception:
+        #     investors_list = []
 
 
         default_inv = pre_params.get("investor") if pre_params and "investor" in pre_params else ""
@@ -270,7 +271,8 @@ def page_about(filters):
 
     def _is_sql_safe(sql_str):
         s = sql_str.strip().lower()
-        if s.startswith("select") or s.startswith("with") or (s.startswith("exec") and "dbo." in s):
+        if s.startswith("select") or s.startswith("with"):
+        # if s.startswith("select") or s.startswith("with") or (s.startswith("exec") and "dbo." in s):
             pass
         else:
             return False, "Only SELECT / WITH / EXEC dbo. statements are allowed."
