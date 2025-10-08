@@ -1,0 +1,25 @@
+# python
+__pycache__/
+*.pyc
+venv/
+env/
+ENV/
+.Python
+*.pyo
+
+# local env
+.env
+
+# database (if large) - uncomment only if you DO NOT want to push sqlite
+# data/sharktank.db
+
+# VS / IDE
+.vs/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit cache & logs
+.streamlit/

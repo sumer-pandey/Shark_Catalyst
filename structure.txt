@@ -1,0 +1,21 @@
+sharktank-app/
+├─ .env
+├─ requirements.txt
+├─ README.md
+├─ app.py                # single entrypoint (streamlit run app.py)
+├─ db.py                 # DB connection + query helper
+├─ utils.py              # helper functions (formatting, caching)
+├─ sql/                  # store SQL query templates
+│   ├─ myth_queries.sql
+│   └─ investor_queries.sql
+├─ pages/
+│   ├─ home.py
+│   ├─ myths.py
+│   ├─ investors.py
+│   ├─ deals.py
+│   ├─ equity.py
+│   ├─ trends.py
+│   └─ about.py
+├─ data/                  # optionally store sqlite file for deploy
+│   └─ sharktank.db
+└─ static/                # logos, images
