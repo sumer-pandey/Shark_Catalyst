@@ -6,11 +6,11 @@ import numpy as np
 import plotly.express as px
 
 def get_sectors():
-    df = cached_query("SELECT DISTINCT sector FROM dbo.deals ORDER BY sector")
+    df = cached_query("SELECT DISTINCT sector FROM deals ORDER BY sector")
     return df['sector'].dropna().tolist()
 
 def get_investors():
-    df = cached_query("SELECT DISTINCT investor FROM dbo.deal_investors ORDER BY investor")
+    df = cached_query("SELECT DISTINCT investor FROM deal_investors ORDER BY investor")
     return df['investor'].dropna().tolist()
 
 def compute_postmoney_from_equity(amount, equity_pct):
@@ -53,7 +53,7 @@ def compatibility_score(offered_amount, offered_equity_pct, investor):
     if not investor:
         return None
     try:
-        row = cached_query("SELECT * FROM dbo.vw_investor_summary WHERE investor = :investor", {"investor": investor})
+        row = cached_query("SELECT median_invested_equity, avg_ticket FROM vw_investor_summary WHERE investor = :investor", {"investor": investor})
         if row.empty:
             return None
         r = row.iloc[0]
@@ -190,8 +190,36 @@ def page_equity(filters):
             st.info("Select a sector to find comparable deals.")
         else:
             try:
-                comps = cached_query("EXEC dbo.sp_comps_by_sector @sector = :sector, @target_amount = :amt, @season = :season, @limit = :limit",
-                                     {"sector": sector, "amt": asked_amount, "season": season, "limit": 5})
+                comps = cached_query("""SELECT company, season, invested_amount, equity_final FROM deals
+                                     WHERE sector = :sector AND invested_amount BETWEEN :amt * 0.5
+                                     AND :amt * 1.5 AND (:season = 'All' OR season = :season)
+                                     ORDER BY ABS(invested_amount - :amt)  -- Find closest ticket size LIMIT 5 """, 
+                                     {"sector": sector, "amt": asked_amount, "season": season})
+                
+                # --- Fetch investors for comps (SQLite compatible aggregation) ---
+                if not comps.empty:
+                    # Ensure 'id' column is available from the simplified query
+                    # The query in Line 236 replacement needs to include 'id' (which it does not explicitly in the previous step, so we assume it's available or should be included in the select * in the new query)
+                    ids = comps['id'].astype(int).tolist()
+                    ids_csv = ",".join(str(int(x)) for x in ids)
+                    inv_sql_comps = f"""
+                    SELECT d.id as deal_id,
+                    GROUP_CONCAT(di2.investor, ', ') AS investors
+                    FROM deals d
+                    JOIN deal_investors di2 ON di2.deal_id = d.id
+                    WHERE d.id IN ({ids_csv})
+                    GROUP BY d.id;
+                    """
+                    inv_map_comps = cached_query(inv_sql_comps)
+                    if not inv_map_comps.empty:
+                        inv_map_comps = inv_map_comps.set_index('deal_id')['investors'].to_dict()
+                        comps['investors'] = comps['id'].apply(lambda i: inv_map_comps.get(i, ""))
+                    else:
+                        comps['investors'] = ""
+                # --- End Investor Fetch ---
+
+                # comps = cached_query("EXEC dbo.sp_comps_by_sector @sector = :sector, @target_amount = :amt, @season = :season, @limit = :limit",
+                #                      {"sector": sector, "amt": asked_amount, "season": season, "limit": 5})
                 if comps is None or comps.empty:
                     st.info("No comparable deals found in this sector.")
                 else:
@@ -200,18 +228,22 @@ def page_equity(filters):
                     if 'invested_amount' in comps_display.columns:
                         comps_display['invested_amount'] = comps_display['invested_amount'].apply(lambda x: format_lakhs(x) if pd.notnull(x) and x!=0 else "-")
                     # normalize investor lists (split combined strings into cleaned individual names)
-                    if 'investors' in comps_display.columns:
-                        def normalize_inv(cell):
-                            if not cell or pd.isnull(cell):
-                                return ""
-                            parts = [p.strip() for p in str(cell).replace(';',',').split(',') if p.strip()]
-                            seen = []
-                            for p in parts:
-                                if p not in seen:
-                                    seen.append(p)
-                            return ", ".join(seen)
-                        comps_display['investors'] = comps_display['investors'].apply(normalize_inv)
+                    # if 'investors' in comps_display.columns:
+                    #     def normalize_inv(cell):
+                    #         if not cell or pd.isnull(cell):
+                    #             return ""
+                    #         parts = [p.strip() for p in str(cell).replace(';',',').split(',') if p.strip()]
+                    #         seen = []
+                    #         for p in parts:
+                    #             if p not in seen:
+                    #                 seen.append(p)
+                    #         return ", ".join(seen)
+                    #     comps_display['investors'] = comps_display['investors'].apply(normalize_inv)
                     # rename columns to friendly names
+
+                    if 'investors' not in comps_display.columns:
+                        comps_display['investors'] = ''
+                    
                     sim_rename = {}
                     if 'company' in comps_display.columns: sim_rename['company'] = 'Company'
                     if 'season' in comps_display.columns: sim_rename['season'] = 'Season'
