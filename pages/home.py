@@ -45,7 +45,8 @@ def page_home(filters):
 
     # KPI query (stored proc)
     try:
-        kpi_df = cached_query("EXEC dbo.sp_home_kpis @season = :season", {"season": season})
+        kpi_df = cached_query("""SELECT COUNT(1) AS total_pitches, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) AS funded_deals, 1.0 * SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(COUNT(1), 0) AS funded_rate, SUM(COALESCE(invested_amount, 0)) AS total_capital_invested, AVG(CASE WHEN invested_amount IS NOT NULL THEN invested_amount ELSE NULL END) AS avg_deal_size, AVG(CASE WHEN invested_amount IS NOT NULL THEN equity_final ELSE NULL END) AS avg_equity_accepted, 1.0 * SUM(CASE WHEN invested_amount IS NOT NULL AND invested_amount < 100 THEN 1 ELSE 0 END) / NULLIF(SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END), 0) AS pct_deals_under_1cr FROM deals WHERE (:season = 'All' OR season = :season)""", {"season": season})
+        # kpi_df = cached_query("EXEC dbo.sp_home_kpis @season = :season", {"season": season})
         if not kpi_df.empty:
             kpi = kpi_df.iloc[0]
 
@@ -112,7 +113,8 @@ def page_home(filters):
     # Trend by episode (use stored proc that includes rolling_3_episode_avg)
 
     try:
-        trend_df = cached_query("EXEC dbo.sp_home_trend_by_episode @season = :season", {"season": season})
+        trend_df = cached_query("""SELECT season, episode_id, SUM(COALESCE(invested_amount, 0)) AS total_invested, COUNT(1) AS pitches FROM deals WHERE (:season = 'All' OR season = :season) GROUP BY season, episode_id ORDER BY episode_id""", {"season": season})
+        # trend_df = cached_query("EXEC dbo.sp_home_trend_by_episode @season = :season", {"season": season})
         if not trend_df.empty:
             # 1) Aggregate to season-level: sum invested and count pitches (episodes) per season
             invest_by_season = trend_df.groupby('season', sort=False)['total_invested'].sum().reset_index()
@@ -183,7 +185,8 @@ def page_home(filters):
             st.plotly_chart(fig, use_container_width=True)
 
             if filters.get("view_sql"):
-                st.code("EXEC dbo.sp_home_trend_by_episode @season = :season")
+                st.code("SELECT season, episode_id, SUM(COALESCE(invested_amount, 0)) AS total_invested, COUNT(1) AS pitches FROM deals WHERE (:season = 'All' OR season = :season) GROUP BY season, episode_id ORDER BY episode_id")
+                # st.code("EXEC dbo.sp_home_trend_by_episode @season = :season")
     except Exception as e:
         st.warning("Trend load issue: " + str(e))
 
@@ -191,13 +194,13 @@ def page_home(filters):
     st.markdown("## Sector-wise breakdown")
     # Sector breakdown — exclude zero-total sectors and show download CSV
     sectors_sql = """
-    SELECT COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(ISNULL(invested_amount,0)) AS total_invested
-    FROM dbo.deals
+    sql SELECT COALESCE(sector,'Unknown') AS sector, COUNT(*) AS deals, SUM(COALESCE(invested_amount,0)) AS total_invested  
+    FROM deals
     WHERE (:season = 'All' OR season = :season)
     GROUP BY COALESCE(sector,'Unknown')
-    HAVING SUM(ISNULL(invested_amount,0)) > 0
+    HAVING SUM(COALESCE(invested_amount,0)) > 0
     ORDER BY total_invested DESC
-    OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY;
+    LIMIT 10;
     """
     try:
         df_sectors = cached_query(sectors_sql, {"season": season})
@@ -228,32 +231,16 @@ def page_home(filters):
         # Use per-investor invested_amount when available in deal_investors.
         # If per-investor amounts missing, fall back to splitting deal-level invested_amount evenly across investors on that deal.
         top_sharks_sql = """
-        WITH inv_counts AS (
-          SELECT deal_id, COUNT(*) AS inv_count
-          FROM dbo.deal_investors
-          GROUP BY deal_id
-        )
-        SELECT TOP 5
-          di.investor,
-          COUNT(DISTINCT di.deal_id) AS deals_count,
-          SUM(
-            COALESCE(
-              di.invested_amount,
-              CASE WHEN ic.inv_count > 0 THEN CAST(d.invested_amount AS FLOAT) / ic.inv_count ELSE CAST(d.invested_amount AS FLOAT) END
-            )
-          ) AS total_invested,
-          AVG(
-            COALESCE(
-              di.invested_amount,
-              CASE WHEN ic.inv_count > 0 THEN CAST(d.invested_amount AS FLOAT) / ic.inv_count ELSE CAST(d.invested_amount AS FLOAT) END
-            )
-          ) AS avg_ticket
-        FROM dbo.deal_investors di
-        JOIN dbo.deals d ON di.deal_id = d.id
-        LEFT JOIN inv_counts ic ON ic.deal_id = d.id
-        WHERE di.investor IS NOT NULL
-        GROUP BY di.investor
-        ORDER BY total_invested DESC;
+        sql WITH inv_counts AS ( SELECT deal_id, COUNT(*) AS inv_count
+        FROM deal_investors GROUP BY deal_id ) SELECT di.investor, COUNT(DISTINCT di.deal_id)
+        AS deals_count, SUM( COALESCE( di.invested_amount, CASE WHEN ic.inv_count > 0
+        THEN CAST(d.invested_amount AS REAL) / ic.inv_count ELSE CAST(d.invested_amount AS REAL) END ) )
+        AS total_invested, AVG( COALESCE( di.invested_amount, CASE WHEN ic.inv_count > 0
+        THEN CAST(d.invested_amount AS REAL) / ic.inv_count ELSE CAST(d.invested_amount AS REAL) END ) )
+        AS avg_ticket FROM deal_investors di JOIN deals d
+        ON di.deal_id = d.id LEFT JOIN inv_counts ic ON ic.deal_id = d.id
+        WHERE di.investor IS NOT NULL AND (:season = 'All' OR d.season = :season)
+        GROUP BY di.investor ORDER BY total_invested DESC LIMIT 5;
         """
         top_sharks = cached_query(top_sharks_sql)
         if not top_sharks.empty:
@@ -277,7 +264,8 @@ def page_home(filters):
     st.markdown("---")
     st.subheader("Recent Deals")
     try:
-        df_recent = cached_query("EXEC dbo.sp_recent_deals @season = :season, @top = :top", {"season": season, "top": 8})
+        df_recent = cached_query("SELECT * FROM deals WHERE (:season = 'All' OR season = :season) ORDER BY original_air_date DESC LIMIT :top", {"season": season, "top": 8})
+        # df_recent = cached_query("EXEC dbo.sp_recent_deals @season = :season, @top = :top", {"season": season, "top": 8})
         if not df_recent.empty:
             # apply quick_search filter client-side if provided
             q = filters.get("quick_search","").strip()
@@ -314,7 +302,8 @@ def page_home(filters):
             st.dataframe(display, use_container_width=True)
             st.download_button("Download recent deals CSV", display.to_csv(index=True), file_name="recent_deals.csv", mime="text/csv")
             if filters.get("view_sql"):
-                st.code("EXEC dbo.sp_recent_deals @season = :season, @top = :top")
+                st.code("SELECT * FROM deals WHERE (:season = 'All' OR season = :season) ORDER BY original_air_date DESC LIMIT :top")
+                # st.code("EXEC dbo.sp_recent_deals @season = :season, @top = :top")
                 
         else:
             st.info("No recent deals available.")
@@ -326,10 +315,9 @@ def page_home(filters):
     # compute small insights safely
     try:
         top_sector_df = cached_query("""
-            SELECT TOP 1 COALESCE(sector,'Unknown') AS sector, SUM(ISNULL(invested_amount,0)) AS total_invested
-            FROM dbo.deals
+            SELECT COALESCE(sector,'Unknown') AS sector, SUM(COALESCE(invested_amount,0)) AS total_invested FROM deals
             GROUP BY COALESCE(sector,'Unknown')
-            ORDER BY total_invested DESC;
+            ORDER BY total_invested DESC LIMIT 1;
         """)
         top_sector = top_sector_df.iloc[0]['sector'] if not top_sector_df.empty else "N/A"
     except Exception:
@@ -340,7 +328,8 @@ def page_home(filters):
         if 'kpi' in locals():
             avg_ticket_val = kpi.avg_deal_size
         else:
-            avg_ticket_df = cached_query("SELECT AVG(ISNULL(invested_amount,0)) AS avg_ticket FROM dbo.deals;")
+            avg_ticket_df = cached_query("SELECT AVG(COALESCE(invested_amount,0)) AS avg_ticket FROM deals;")
+            # avg_ticket_df = cached_query("SELECT AVG(ISNULL(invested_amount,0)) AS avg_ticket FROM dbo.deals;")
             avg_ticket_val = avg_ticket_df.iloc[0]['avg_ticket'] if not avg_ticket_df.empty else None
     except Exception:
         avg_ticket_val = None
@@ -348,7 +337,7 @@ def page_home(filters):
     try:
         funded_rates = cached_query("""
             SELECT season, SUM(CASE WHEN invested_amount IS NOT NULL THEN 1 ELSE 0 END)*1.0/NULLIF(COUNT(*),0) AS funded_rate
-            FROM dbo.deals
+            FROM deals
             GROUP BY season
             ORDER BY season;
         """)
