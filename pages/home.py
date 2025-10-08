@@ -231,7 +231,7 @@ def page_home(filters):
         # Use per-investor invested_amount when available in deal_investors.
         # If per-investor amounts missing, fall back to splitting deal-level invested_amount evenly across investors on that deal.
         top_sharks_sql = """
-        sql WITH inv_counts AS ( SELECT deal_id, COUNT(*) AS inv_count
+        WITH inv_counts AS ( SELECT deal_id, COUNT(*) AS inv_count
         FROM deal_investors GROUP BY deal_id ) SELECT di.investor, COUNT(DISTINCT di.deal_id)
         AS deals_count, SUM( COALESCE( di.invested_amount, CASE WHEN ic.inv_count > 0
         THEN CAST(d.invested_amount AS REAL) / ic.inv_count ELSE CAST(d.invested_amount AS REAL) END ) )
@@ -242,7 +242,7 @@ def page_home(filters):
         WHERE di.investor IS NOT NULL AND (:season = 'All' OR d.season = :season)
         GROUP BY di.investor ORDER BY total_invested DESC LIMIT 5;
         """
-        top_sharks = cached_query(top_sharks_sql)
+        top_sharks = cached_query(top_sharks_sql, {"season": filters.get("season", "All")})
         if not top_sharks.empty:
             cols = st.columns(5)
             for i, row in top_sharks.reset_index(drop=True).iterrows():
