@@ -1,9 +1,12 @@
-streamlit
+streamlit>=1.20
 pandas
 sqlalchemy
 pyodbc
 python-dotenv
+psycopg2-binary
 plotly
 matplotlib
 networkx
 sqlalchemy-utils
+python-dotenv
+streamlit-plotly-events
