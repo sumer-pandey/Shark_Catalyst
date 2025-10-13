@@ -10,45 +10,6 @@ load_dotenv()
 
 st.set_page_config(page_title="Shark Catalyst - Interactive Analytics Platform for Indian Startup Ecosystem", page_icon="assets/logo.png", layout="wide")
 
-# Apply dark theme styling to all charts and tables
-st.markdown("""
-    <style>
-    /* Make all dataframes/tables match dark theme */
-    [data-testid="stDataFrame"], 
-    [data-testid="stTable"],
-    .dataframe {
-        background-color: transparent !important;
-    }
-    
-    /* Plotly charts dark background */
-    .js-plotly-plot .plotly,
-    .js-plotly-plot .plotly .main-svg {
-        background-color: transparent !important;
-    }
-    
-    /* Tables and dataframe cells */
-    .dataframe tbody tr,
-    .dataframe thead tr {
-        background-color: rgba(14, 17, 23, 0.8) !important;
-    }
-    
-    .dataframe th {
-        background-color: rgba(14, 17, 23, 0.9) !important;
-        color: white !important;
-    }
-    
-    .dataframe td {
-        background-color: rgba(28, 31, 38, 0.8) !important;
-        color: white !important;
-    }
-    
-    /* Remove white backgrounds from metrics and containers */
-    [data-testid="metric-container"],
-    [data-testid="stMetricValue"] {
-        background-color: transparent !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 st.markdown(
     """
