@@ -1,0 +1,165 @@
+# 🦈 Shark Catalyst  
+### Data-Driven Insights from Shark Tank India  
+_A comprehensive analytical engine for decoding investment patterns, market myths, and startup behavior._
+
+---
+
+## 📊 Overview
+
+**Shark Catalyst** is a full-stack analytics and visualization platform built to analyze, interpret, and visualize insights from **Shark Tank India** data.  
+It integrates **SQL-driven evidence**, **statistical modeling**, and **interactive dashboards** to reveal real-world trends in founder behavior, investor strategy, and deal outcomes.
+
+The platform powers deep dives such as:
+
+- Investor behavior analysis and co-investment networks  
+- Statistical validation of common startup funding myths  
+- Sector, geography, and valuation-based deal trends  
+- Evidence-backed insights into success probability and equity outcomes  
+
+---
+
+## 🚀 Core Features
+
+| Category | Description |
+|-----------|-------------|
+| 💡 **Myth Buster Engine** | Tests over 20 real market assumptions using statistical techniques (Chi-Square, Regression, Mann-Whitney, etc.) with SQL-driven datasets. |
+| 📈 **Deal Explorer** | Explore every deal — filter by investor, sector, season, city, and valuation; visualize funding patterns. |
+| 🧠 **Investor Intelligence** | Deep profile of each investor — portfolio summary, sector preference, co-investor network, and deal performance. |
+| 💰 **Valuation & Equity Simulator** | Interactive sandbox to simulate post-deal equity structures and founder dilution scenarios. |
+| 🌍 **Geographic Insights** | Metro vs. non-metro funding success, regional deal distribution, and startup hotspots. |
+| 🧮 **Statistical Transparency** | Every metric and graph backed by reproducible SQL queries and robust hypothesis testing. |
+
+---
+
+## 🧠 Data & Methodology
+
+**Primary Dataset:** [Kaggle – Shark Tank India by Thirumani](https://www.kaggle.com/datasets/thirumani/shark-tank-india)  
+
+**Analytical Framework Highlights**
+- Minimum sample size: **n > 30**
+- Statistical significance threshold: **p < 0.05**
+- Effect size measured via **Cohen’s d**
+- **Propensity score matching** for controlled comparisons
+- **Bonferroni correction** for multiple hypothesis testing
+
+All results in the **Evidence-Based Myth Analysis** section are powered by SQL scripts inside `/sql/sql/`, ensuring transparency and reproducibility.
+
+---
+
+## 🧩 Project Structure
+
+<pre><code>
+shark-catalyst/
+├── app.py # Main Streamlit app entry point
+├── utils/ # Shared utility functions (cache, formatting, styling)
+├── pages/ # Modular Streamlit pages (Investors, Deals, Myths, etc.)
+├── sql/
+│ └── sql/ # Main SQL logic powering dashboards & analysis
+├── assets/
+│ ├── logo.png # App logo
+│ ├── case-study.pdf # Evidence-Based Myth Analysis report
+│ └── custom.css # App-level CSS overrides
+├── data/
+│ └── sharktank.db # SQLite database (used for local analysis)
+├── requirements.txt # Python dependencies
+├── .env.example # Sample environment variable template
+├── .gitignore
+└── README.md
+</code></pre>
+---
+
+## 📘 Key Analytical Modules
+
+| Module | Description |
+|---------|-------------|
+| **Evidence-Based Myth Analysis** | Rigorous testing of startup market assumptions using SQL + statistical methods. |
+| **Investor Intelligence** | Tracks each investor’s deal portfolio, co-investments, and sector concentration. |
+| **Deal Explorer** | Full searchable and filterable deal dataset with dynamic charts. |
+| **Trends Dashboard** | Season-wise progression of invested capital, valuation trends, and ticket sizes. |
+| **Equity Modeling** | Tools for analyzing founder vs. investor ownership scenarios. |
+
+---
+
+## 🧮 Statistical Toolkit Summary
+
+| Method | Purpose |
+|---------|----------|
+| **Chi-Square Test** | Identify relationships between categorical variables (e.g., metro vs non-metro funding). |
+| **Mann–Whitney U Test** | Compare distributions (e.g., sales between funded vs. non-funded startups). |
+| **Logistic Regression** | Estimate probability of deal success based on predictor variables. |
+| **Effect Size (Cohen’s d)** | Quantify magnitude of practical significance. |
+| **Bonferroni Correction** | Adjust for multiple hypothesis testing. |
+
+---
+
+## 🏗️ Tech Stack
+
+| Layer | Technologies |
+|--------|---------------|
+| **Frontend / UI** | Streamlit (Python) |
+| **Backend Logic** | Pandas, SQLAlchemy, NumPy |
+| **Database** | SQLite / MSSQL / PostgreSQL (configurable) |
+| **Visualization** | Plotly, NetworkX |
+| **Styling & UX** | Streamlit Custom Components + CSS |
+| **Version Control** | Git + GitHub |
+
+---
+
+## 📄 Case Study Report
+
+The report **“Evidence-Based Myth Analysis”** (in `/assets/case-study.pdf`) consolidates all hypothesis testing frameworks, statistical results, and data-driven insights generated by Shark Catalyst.  
+It’s a ready-to-use analytical document for presentations or publications.
+
+---
+
+## 🧾 Example Myths Tested
+
+- Startups with patents are funded at a higher rate  
+- Startups with >20 SKUs are funded less often  
+- Bootstrapped startups are funded more often  
+- Deals with royalties close less often than equity-only deals  
+- Investors tend to concentrate >50% of their capital in specific sectors  
+- Average ticket size has increased over successive seasons  
+
+Each myth includes:
+- Methodology (SQL logic)
+- Statistical test applied  
+- Verdict and confidence level  
+- Effect size or rate differential  
+
+---
+
+## 🧑‍💻 Author
+
+**Sumer Pandey**  
+🔗 [LinkedIn](https://www.linkedin.com/in/sumerpandey/)  
+💻 [GitHub](https://github.com/sumer-oandey)  
+📧 workmailsumer@gmail.com  
+
+---
+
+## 💬 Acknowledgments
+
+- **Dataset:** Thirumani (Kaggle Dataset – Shark Tank India)  
+- **Framework:** Streamlit Community  
+- **Visualization Libraries:** Plotly, NetworkX  
+- **Inspiration:** The entrepreneurs and investors shaping India’s startup ecosystem  
+
+---
+
+## ⚠️ Disclaimer
+
+> “Shark Tank India” is a registered trademark of **Sony Pictures Networks India**.  
+> This project is intended purely for **educational and analytical purposes** under fair use.  
+> No commercial use or trademark infringement is intended.
+
+---
+
+## 🏁 License
+
+Licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.
+
+---
+
+### 🏆 Built with accuracy, curiosity, and data-driven storytelling.  
+_We win — that’s what we do._

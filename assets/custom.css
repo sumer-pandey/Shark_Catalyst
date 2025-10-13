@@ -1,0 +1,236 @@
+/* assets/custom.css
+   Theme: Playfair Display (headings) + Lora (body)
+   Palette:
+     Background: #1E2A3A
+     Headings:   #E0E0E0
+     Body text:  #B8B8B8
+     Accent/CTA: #9D8C5A
+*/
+
+/* Import Material Icons font (fixes random text like keyboard_double_arrow_right) */
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+.material-icons {
+  font-family: 'Material Icons' !important;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.material-icons-round, .material-icons-sharp, .icon { font-family: 'Material Icons' !important; }
+
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Lora:wght@300;400;700&display=swap');
+
+:root{
+  --bg: #1E2A3A;
+  --card: #163040;
+  --heading: #E0E0E0;
+  --body: #B8B8B8;
+  --accent: #9D8C5A;
+  --muted: #9AA3AC;
+  --focus: rgba(157,140,90,0.22); /* accent tint for outlines */
+}
+
+/* Base app background and text */
+[data-testid="stAppViewContainer"] {
+  background-color: var(--bg) !important;
+  color: var(--body) !important;
+  font-family: 'Lora', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Card background */
+[data-testid="stVerticalBlock"] > div[role="region"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(0,0,0,0.02));
+  border-radius: 10px;
+}
+
+/* Headings use Playfair Display for elegance */
+h1, h2, h3, .css-1v0mbdj h1, .css-1v0mbdj h2 {
+  font-family: 'Playfair Display', 'Georgia', serif !important;
+  color: var(--heading) !important;
+  margin-top: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+/* Body text color */
+.stApp, .css-1d391kg, p, span, .stText {
+  color: var(--body) !important;
+  font-family: 'Lora', Arial, sans-serif !important;
+}
+
+/* Big CTA button (header) */
+.big-cta {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.30);
+}
+
+/* KPI card style (metrics) */
+.stMetric {
+  padding: 10px 12px !important;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.03));
+  color: var(--body) !important;
+}
+
+/* Metric headings (make them Playfair for emphasis) */
+.stMetric > div > div:nth-child(1) {
+  font-family: 'Playfair Display', serif !important;
+  color: var(--heading) !important;
+}
+
+/* DataFrame hover row */
+.stDataFrame tbody tr:hover {
+  background: rgba(157,140,90,0.04) !important; /* subtle antique-gold hover */
+}
+
+/* Buttons */
+.stButton>button {
+  border-radius: 8px !important;
+  background-color: transparent;
+  color: var(--body) !important;
+}
+
+/* Accent outline for focus (accessibility) */
+button:focus, a:focus, input:focus, select:focus, textarea:focus {
+  outline: 3px solid var(--focus) !important;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Code blocks readable */
+code, pre {
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.95rem;
+  color: var(--body);
+  background: rgba(0,0,0,0.12);
+  padding: 6px;
+  border-radius: 6px;
+}
+
+/* Footer small text */
+footer, .footer {
+  font-size: 0.90rem;
+  color: var(--muted) !important;
+}
+
+/* Plotly fig container tweaks (ensure contrast) */
+.plotly-graph-div {
+  background: transparent !important;
+}
+
+/* ---------------------------
+   Fix: hide Streamlit built-in Pages nav (auto pages)
+   and enforce Material Icons font rendering
+   --------------------------- */
+
+/* 1) Hide the "Pages" auto-navigation widgets that Streamlit injects.
+   The exact DOM classes can vary across Streamlit versions, so we include a
+   few robust attribute selectors. This hides the top-left pages panel and the
+   left-side auto-generated pages list while leaving your sidebar radio control intact.
+*/
+[aria-label="Open navigation"], /* top-left burger menu button */
+[aria-label="Pages"],           /* pages panel heading */
+div[data-testid="stSidebarNav"], /* sidebar nav container (auto pages) */
+div[data-testid="stPages"]      /* older versions */ {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 2) Enforce the Material Icons fonts for icon elements so they don't fall
+   back to literal text (keyboard_double_arrow_right etc). This overrides any
+   global font-family styling that might have prevented proper icon rendering.
+*/
+.material-icons, .material-icons-outlined, i.material-icons, span.material-icons {
+  font-family: 'Material Icons' !important;
+  font-weight: normal !important;
+  font-style: normal !important;
+  font-size: inherit !important;
+  line-height: 1 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  display: inline-block !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* 3) Extra fallback: sometimes Streamlit uses a custom element for nav. hide any element that contains the default page listing text.
+   This is a broad but safe selector that specifically targets lists/menus that include page names.
+*/
+nav[aria-label] > ul > li > a[href*="/pages/"], /* internal page links */
+nav[role="navigation"] ul li a {
+  display: none !important;
+}
+
+/* 4) Improve contrast for icons if they are rendered as glyphs */
+.material-icons, .material-icons-outlined {
+  color: var(--accent) !important; /* uses your CSS variable defined earlier */
+}
+
+/* 5) small safety: ensure sidebar's first container (app-level custom nav) remains visible */
+[data-testid="stSidebar"] > div:first-child {
+  display: block !important;
+}
+
+/* ---------------------------
+   Stronger hide for Streamlit auto Pages nav (extra selectors)
+   Append this at the end of assets/custom.css
+   --------------------------- */
+
+/* Hide any navs/sidebars that contain the auto pages list (multiple fallbacks) */
+div[role="navigation"] nav,         /* generic navs */
+div[role="navigation"] ul,          /* lists in nav */
+div[role="navigation"] li,          /* items */
+aside[aria-label="global"],        /* older versions */
+[title="Pages"],                    /* any element titled Pages */
+div[class*="stSidebarNav"],         /* match by partial class */
+div[data-testid="stSidebarNav"],    /* explicit test id */
+div[data-testid="stPages"],         /* older versions/test ids */
+[aria-label^="Pages"],               /* aria-label starting with Pages */
+[aria-label="Open navigation"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Content-based hide: hide any anchor whose text contains known page names
+   (this targets those auto-generated lists that include anchors with page names). */
+a:where(:not([href^="#"])) {
+  /* no-op to increase specificity context */
+}
+a[href*="/pages/"], a[href*="pages/"], a:has(span:contains("Home")), a:has(span:contains("Myth Buster")), a:has(span:contains("Investors")), a:has(span:contains("Deal Explorer")), a:has(span:contains("Equity Calculator")), a:has(span:contains("Trends & Insights")), a:has(span:contains("About / Methodology")) {
+  display: none !important;
+}
+
+/* Safety: ensure the app's own sidebar container remains visible */
+[data-testid="stSidebar"] > div:first-child {
+  display: block !important;
+}
+
+/* Re-enforce material icons glyph font (if custom CSS earlier overrides it) */
+.material-icons, .material-icons-outlined, .material-symbols-outlined {
+  font-family: 'Material Icons', 'Material Icons Outlined', 'Material Symbols Outlined' !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
