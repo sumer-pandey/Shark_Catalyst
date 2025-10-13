@@ -67,31 +67,31 @@ import pandas as pd
 # FINAL FIX: Explicitly specify the driver for st.connection
 # ----------------------------------------------------------------------
 
+# db.py (Final Fix for parameters)
+
 @st.cache_data(ttl=600)
 def run_query(sql, params=None):
     """
     Connects to the database using the Streamlit st.connection method
     and executes a query, leveraging Streamlit's built-in caching.
     """
-    
-    # CRITICAL: We explicitly pass the driver='postgresql' here. 
-    # This forces Streamlit to look for host/port/db/user/pass in the secrets
-    # and use the correct remote connection method (not the local socket).
     try:
         conn = st.connection(
             "supabase", 
             type="sql",
-            dialect="postgresql" # <--- THIS IS THE KEY ADDITION
+            dialect="postgresql" 
         )
     except Exception as e:
-        # If the connection itself fails, we raise a clear error.
         raise RuntimeError(f"Could not establish Streamlit connection 'supabase'. Check secrets file and database credentials. Error: {e}") from e
 
     # Execute the query using the connection object's query method
     try:
-        # Streamlit's query method uses pandas.read_sql internally
-        # We ensure the data is returned as a DataFrame
-        df = conn.query(sql, params=params, ttl=600)
+        # CRITICAL FIX: Ensure params is always a tuple for positional placeholders (%s)
+        # If params is None, use an empty tuple: ()
+        # If params is a list/tuple, use it directly.
+        final_params = params if params is not None else () 
+        
+        df = conn.query(sql, params=final_params, ttl=600) # Use the sanitized params
         return df
     except Exception as e:
         # Provide informative error for debugging
