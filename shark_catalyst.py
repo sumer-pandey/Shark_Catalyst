@@ -220,7 +220,7 @@ with st.container():
     with col1:
         st.markdown("**Data source:** Kaggle dataset - Thirumani (Shark Tank India).  ")
         st.markdown("[Kaggle: Shark Tank India (Thirumani)](https://www.kaggle.com/datasets/thirumani/shark-tank-india)  ")
-        st.markdown("[GitHub repo](https://github.com/being-sumer)  |  [LinkedIn](https://www.linkedin.com/in/sumerpandey/)")
+        st.markdown("[GitHub repo](https://github.com/sumer-pandey)  |  [LinkedIn](https://www.linkedin.com/in/sumerpandey/)")
     
     with col2:
         try:
