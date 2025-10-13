@@ -64,68 +64,123 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from typing import Optional
 
-# Do NOT create the engine at import time.
-# Instead, create it lazily the first time someone needs it.
+# -------------------------
+# Lazy engine creation API
+# -------------------------
+
 _ENGINE: Optional[Engine] = None
 
 def _get_database_url():
     """
-    Resolve the database connection URL from environment variables.
-    Order of preference:
-      1. DATABASE_URL environment variable
-      2. SUPABASE_DB_URL environment variable (if you named it differently)
-      3. Return None if not found
-    NOTE: Do not hardcode credentials. Set these in your Streamlit Secrets / env.
+    Resolve database connection URL from environment variables.
     """
     return os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
 
-def get_engine():
+def create_real_engine():
     """
-    Lazily create and return a SQLAlchemy engine. If DATABASE_URL is missing,
-    raise a clear error instructing the deployer what to set.
+    Create and return a real SQLAlchemy engine or raise a clear error if DB URL missing.
     """
-    global _ENGINE
-    if _ENGINE is not None:
-        return _ENGINE
-
     db_url = _get_database_url()
     if not db_url:
-        # Clear, non-sensitive instruction for the user/deployer
         raise RuntimeError(
-            "DATABASE_URL is not set. Set the DATABASE_URL environment variable "
-            "or Streamlit secret (key: DATABASE_URL) to your Supabase/Postgres connection URL. "
-            "Example value should look like: postgresql://user:password@host:5432/dbname (DO NOT hardcode credentials in code)."
+            "DATABASE_URL is not set. Set the DATABASE_URL environment variable or Streamlit secret "
+            "(key: DATABASE_URL) to your Supabase/Postgres connection URL (postgresql://user:pass@host:port/dbname)."
         )
+    return create_engine(db_url, pool_pre_ping=True)
 
-    # Create engine once (safe for app lifetime)
-    _ENGINE = create_engine(db_url, pool_pre_ping=True)
+def get_engine() -> Engine:
+    """
+    Return a real SQLAlchemy engine, creating it if necessary.
+    """
+    global _ENGINE
+    if _ENGINE is None:
+        _ENGINE = create_real_engine()
     return _ENGINE
 
+# -------------------------
+# Backwards-compatible 'engine' proxy
+# -------------------------
+class _LazyEngineProxy:
+    """
+    A small proxy object so other modules can `from db import engine`
+    and use engine.connect(), engine.raw_connection(), etc., while delaying
+    actual engine creation until first attribute access.
+    """
+    def __init__(self):
+        self._real = None
+
+    def _ensure(self):
+        if self._real is None:
+            self._real = get_engine()
+        return self._real
+
+    # Delegate common methods used by code
+    def connect(self, *args, **kwargs):
+        return self._ensure().connect(*args, **kwargs)
+
+    def raw_connection(self, *args, **kwargs):
+        return self._ensure().raw_connection(*args, **kwargs)
+
+    def execute(self, *args, **kwargs):
+        # SQLAlchemy 2.0 removed Engine.execute, but in case older code uses it:
+        real = self._ensure()
+        if hasattr(real, "execute"):
+            return real.execute(*args, **kwargs)
+        # fallback: use connection.execute
+        conn = real.connect()
+        try:
+            return conn.execute(*args, **kwargs)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def dispose(self):
+        if self._real is not None:
+            self._real.dispose()
+
+    def __getattr__(self, name):
+        # Delegate anything else to the real engine
+        real = self._ensure()
+        return getattr(real, name)
+
+# Expose the proxy as `engine` so imports like `from db import engine` still work.
+engine = _LazyEngineProxy()
+
+# -------------------------
+# Utility: run_query
+# -------------------------
 def run_query(sql: str, params=None, fetch=True, row_limit=None):
     """
-    Execute SQL safely and return a pandas DataFrame (for SELECTs).
-    See docstring in the main conversation for behavior.
+    Execute SQL and return a pandas DataFrame for SELECTs.
+    - sql: SQL string with positional (%s) or named params depending on DB driver used.
+    - params: None, tuple/list, dict, or list-of-tuples/dicts for executemany.
+    - fetch: if True and cursor.description present, return DataFrame, else return empty DataFrame.
+    - row_limit: client-side cap on returned rows.
+
+    Raises RuntimeError with the SQL snippet and original error for visibility.
     """
     conn = None
     cur = None
     try:
-        engine = get_engine()
+        # Use engine.raw_connection() to get a DB-API cursor for universal param behavior
         conn = engine.raw_connection()
         cur = conn.cursor()
 
-        # Param handling (robust)
+        # Param handling:
         if params is None:
             cur.execute(sql)
         else:
+            # If params is a list, check if it's a list of tuples/dicts (executemany)
             if isinstance(params, list):
-                # If it's list-of-tuples or list-of-dicts -> executemany
                 if all(isinstance(p, (tuple, dict)) for p in params):
                     cur.executemany(sql, params)
                 else:
-                    # treat as a single tuple of positional params
+                    # It's a list but not list-of-tuples/dicts -> treat as single tuple
                     cur.execute(sql, tuple(params))
             else:
-                # dict, tuple, scalar -> single execute
+                # tuple, dict, scalar -> single execute
                 cur.execute(sql, params)
 
         if fetch and cur.description:
@@ -135,7 +190,7 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
                 rows = rows[:row_limit]
             df = pd.DataFrame(rows, columns=cols)
         else:
-            # commit for non-select statements (defensive)
+            # commit for non-selects if needed
             if not fetch:
                 conn.commit()
             df = pd.DataFrame()
