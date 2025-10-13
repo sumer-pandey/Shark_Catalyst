@@ -70,18 +70,20 @@ from typing import Optional
 
 _ENGINE: Optional[Engine] = None
 
+# -------------------------
+# Database URL resolution + engine creation
+# -------------------------
+import urllib.parse
+
 def _get_database_url():
     """
     Resolve database connection URL from environment variables or Streamlit secrets.
 
-    Order of precedence:
-      1. Environment variables: DATABASE_URL, SUPABASE_DB_URL
-      2. Streamlit secrets top-level: DATABASE_URL or database_url
-      3. Streamlit secrets nested: connections -> supabase -> database_url
-      4. Streamlit dotted key: "connections.supabase" containing a dict with database_url
-      5. Recursive search for any 'database_url' or 'DATABASE_URL' key inside st.secrets
-
-    Note: passwords containing '@' must be percent-encoded (e.g. '@' -> '%40') when used in URLs.
+    Returns:
+      - full DB URL string (e.g. postgresql://user:pass@host:port/dbname) or None
+    NOTE:
+      we intentionally do NOT accept a short 'database' value (like 'postgres') as a valid URL.
+      This avoids errors like "Could not parse SQLAlchemy URL from string 'postgres'".
     """
     # 1) env vars (fast path)
     env_val = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
@@ -97,62 +99,92 @@ def _get_database_url():
     if st is None:
         return None
 
-    # direct top-level keys
-    if "DATABASE_URL" in st.secrets:
-        return st.secrets["DATABASE_URL"]
-    if "database_url" in st.secrets:
-        return st.secrets["database_url"]
+    # direct top-level keys preferred
+    for key in ("DATABASE_URL", "database_url"):
+        if key in st.secrets:
+            cand = st.secrets[key]
+            # accept only full URLs with scheme
+            if isinstance(cand, str) and "://" in cand:
+                return cand
 
     # nested conventional layout: st.secrets["connections"]["supabase"]["database_url"]
     try:
-        if "connections" in st.secrets and "supabase" in st.secrets["connections"]:
-            cand = st.secrets["connections"]["supabase"].get("database_url") \
-                   or st.secrets["connections"]["supabase"].get("database")
-            if cand:
+        cs = st.secrets.get("connections", {}).get("supabase")
+        if isinstance(cs, dict):
+            cand = cs.get("database_url") or cs.get("DATABASE_URL")
+            if isinstance(cand, str) and "://" in cand:
                 return cand
     except Exception:
         pass
 
-    # dotted key layout: st.secrets["connections.supabase"]["database_url"]
+    # dotted key layout: st.secrets["connections.supabase"]
     try:
-        if "connections.supabase" in st.secrets:
-            cs = st.secrets["connections.supabase"]
-            if isinstance(cs, dict):
-                cand = cs.get("database_url") or cs.get("database")
-                if cand:
-                    return cand
+        cs = st.secrets.get("connections.supabase")
+        if isinstance(cs, dict):
+            cand = cs.get("database_url") or cs.get("DATABASE_URL")
+            if isinstance(cand, str) and "://" in cand:
+                return cand
     except Exception:
         pass
 
-    # last resort: recursive search for 'database_url' or 'DATABASE_URL' anywhere inside st.secrets
-    def _recursive_find(obj):
+    # last resort: recursive search for any full URL-like value
+    def _recursive_find_full_url(obj):
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if k in ("database_url", "DATABASE_URL", "database"):
-                    return v
-                res = _recursive_find(v)
-                if res:
-                    return res
+                if isinstance(v, str) and "://" in v:
+                    # prefer keys containing "db" or "database" first
+                    if any(part in k.lower() for part in ("db", "database", "url")):
+                        return v
+                    # otherwise keep scanning
+                    candidate = _recursive_find_full_url(v)
+                    if candidate:
+                        return candidate
+                elif isinstance(v, dict):
+                    candidate = _recursive_find_full_url(v)
+                    if candidate:
+                        return candidate
         return None
 
-    found = _recursive_find(st.secrets)
+    found = _recursive_find_full_url(st.secrets)
     if found:
         return found
 
+    # If we get here, maybe st.secrets had a short "database" key (like "postgres").
+    # Return None so caller can raise a clear error.
     return None
 
 
 def create_real_engine():
     """
-    Create and return a real SQLAlchemy engine or raise a clear error if DB URL missing.
+    Create and return a real SQLAlchemy engine or raise a clear error if DB URL missing/invalid.
     """
     db_url = _get_database_url()
     if not db_url:
-        raise RuntimeError(
-            "DATABASE_URL is not set. Set the DATABASE_URL environment variable or Streamlit secret "
-            "(key: DATABASE_URL) to your Supabase/Postgres connection URL (postgresql://user:pass@host:port/dbname)."
+        # Helpful debugging message listing where short values may exist in secrets
+        example_msg = (
+            "DATABASE_URL is not set or the provided secret is not a full connection URL.\n"
+            "Please add a top-level secret named DATABASE_URL (or connections.supabase.database_url) with\n"
+            "the full connection string, e.g.:\n\n"
+            "  postgresql://<username>:<percent-encoded-password>@<host>:<port>/<dbname>\n\n"
+            "Important: if your password contains special characters like '@' encode it using percent-encoding\n"
+            "for URLs (e.g. '@' -> '%40'). In Python you can do:\n"
+            "  import urllib.parse\n"
+            "  urllib.parse.quote_plus('yourpassword')\n\n"
+            "Example (do NOT paste your real password here):\n"
+            "  postgresql://postgres.rfbtjnijjbbdzhddarpr:shark%40catalyst1@aws-1-ap-south-1.pooler.supabase.com:6543/postgres\n"
         )
+        raise RuntimeError(example_msg)
+
+    # Basic sanity check: url-like string must contain '://'
+    if "://" not in db_url:
+        raise RuntimeError(
+            "Found a candidate DB value but it does not look like a full URL. "
+            "Provide DATABASE_URL as a full SQLAlchemy/postgres URL (postgresql://user:pass@host:port/dbname)."
+        )
+
+    # create engine
     return create_engine(db_url, pool_pre_ping=True)
+
 
 def get_engine() -> Engine:
     """
