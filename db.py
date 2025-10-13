@@ -60,14 +60,12 @@
 # db.py
 import streamlit as st
 import pandas as pd
-import os
-import pandas as pd
-import psycopg2
-from psycopg2.extras import RealDictCursor
+# os/psycopg2 imports are no longer strictly needed for deployed app but
+# keeping them commented out for reference is fine.
 
-# We will rely entirely on the Streamlit native SQL connection (st.connection)
-# which automatically reads the credentials from the [connections.supabase] block
-# in the Streamlit Cloud secrets.
+# ----------------------------------------------------------------------
+# FINAL FIX: Explicitly specify the driver for st.connection
+# ----------------------------------------------------------------------
 
 @st.cache_data(ttl=600)
 def run_query(sql, params=None):
@@ -76,22 +74,25 @@ def run_query(sql, params=None):
     and executes a query, leveraging Streamlit's built-in caching.
     """
     
-    # 1. Get the connection object (Streamlit handles resource caching)
-    # The 'supabase' name must match the header in your Streamlit secrets file.
+    # CRITICAL: We explicitly pass the driver='postgresql' here. 
+    # This forces Streamlit to look for host/port/db/user/pass in the secrets
+    # and use the correct remote connection method (not the local socket).
     try:
-        conn = st.connection("supabase", type="sql")
+        conn = st.connection(
+            "supabase", 
+            type="sql",
+            dialect="postgresql" # <--- THIS IS THE KEY ADDITION
+        )
     except Exception as e:
-        # If st.connection fails (e.g., secrets missing or local env is weird)
-        raise RuntimeError(f"Could not establish Streamlit connection 'supabase'. Error: {e}") from e
+        # If the connection itself fails, we raise a clear error.
+        raise RuntimeError(f"Could not establish Streamlit connection 'supabase'. Check secrets file and database credentials. Error: {e}") from e
 
-    # 2. Execute the query using the connection object's query method
+    # Execute the query using the connection object's query method
     try:
         # Streamlit's query method uses pandas.read_sql internally
+        # We ensure the data is returned as a DataFrame
         df = conn.query(sql, params=params, ttl=600)
         return df
     except Exception as e:
         # Provide informative error for debugging
         raise RuntimeError(f"run_query failed. SQL: {sql[:300]}... Error: {e}") from e
-
-# NOTE: The psycopg2 imports and manual connection/cursor logic are no longer needed
-# because the st.connection("...", type="sql") wrapper handles all of it.
