@@ -57,76 +57,94 @@
 #             conn.close()
 
 
-# db.py  <-- edit this file
+# db.py
+import os
 import pandas as pd
 from sqlalchemy import create_engine
-import os
+from sqlalchemy.engine import Engine
+from typing import Optional
 
-# your DB URL (should come from env or dotenv as before)
-DATABASE_URL = os.environ.get("DATABASE_URL")  # keep your existing pattern
+# Do NOT create the engine at import time.
+# Instead, create it lazily the first time someone needs it.
+_ENGINE: Optional[Engine] = None
 
-# create engine once (reuse across calls)
-_engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+def _get_database_url():
+    """
+    Resolve the database connection URL from environment variables.
+    Order of preference:
+      1. DATABASE_URL environment variable
+      2. SUPABASE_DB_URL environment variable (if you named it differently)
+      3. Return None if not found
+    NOTE: Do not hardcode credentials. Set these in your Streamlit Secrets / env.
+    """
+    return os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+
+def get_engine():
+    """
+    Lazily create and return a SQLAlchemy engine. If DATABASE_URL is missing,
+    raise a clear error instructing the deployer what to set.
+    """
+    global _ENGINE
+    if _ENGINE is not None:
+        return _ENGINE
+
+    db_url = _get_database_url()
+    if not db_url:
+        # Clear, non-sensitive instruction for the user/deployer
+        raise RuntimeError(
+            "DATABASE_URL is not set. Set the DATABASE_URL environment variable "
+            "or Streamlit secret (key: DATABASE_URL) to your Supabase/Postgres connection URL. "
+            "Example value should look like: postgresql://user:password@host:5432/dbname (DO NOT hardcode credentials in code)."
+        )
+
+    # Create engine once (safe for app lifetime)
+    _ENGINE = create_engine(db_url, pool_pre_ping=True)
+    return _ENGINE
 
 def run_query(sql: str, params=None, fetch=True, row_limit=None):
     """
     Execute SQL safely and return a pandas DataFrame (for SELECTs).
-    - sql: SQL statement using psycopg2 paramstyle (%s) OR named styles (it will work).
-    - params:
-        None -> single execute without params
-        dict -> single execute with named params
-        tuple -> single execute with positional params
-        list:
-          - list of tuples/dicts -> executemany
-          - otherwise -> treat as a single positional param sequence and call execute(sql, tuple(params))
-    Returns:
-        pandas.DataFrame for SELECTs, or an empty DataFrame if nothing returned.
-    Raises RuntimeError on failure with helpful message.
+    See docstring in the main conversation for behavior.
     """
     conn = None
     cur = None
     try:
-        # use raw DB-API connection from SQLAlchemy so psycopg2 paramstyle %s works
-        conn = _engine.raw_connection()
+        engine = get_engine()
+        conn = engine.raw_connection()
         cur = conn.cursor()
 
-        # Normalized param handling:
+        # Param handling (robust)
         if params is None:
             cur.execute(sql)
         else:
-            # If params is a list:
             if isinstance(params, list):
-                # if list-of-tuples or list-of-dicts -> executemany
+                # If it's list-of-tuples or list-of-dicts -> executemany
                 if all(isinstance(p, (tuple, dict)) for p in params):
                     cur.executemany(sql, params)
                 else:
-                    # treat as a single tuple of positional params (common case where caller passed a list)
+                    # treat as a single tuple of positional params
                     cur.execute(sql, tuple(params))
             else:
-                # params is tuple, dict, or scalar -> single execute
-                # Note: scalar values (int/str) will still work if DB API accepts them as second arg
+                # dict, tuple, scalar -> single execute
                 cur.execute(sql, params)
 
-        # If the statement returns rows, fetch them and build DataFrame
-        if fetch:
-            cols = [d[0] for d in cur.description] if cur.description else []
-            rows = cur.fetchall() if cur.description else []
-            # optional row cap
+        if fetch and cur.description:
+            cols = [d[0] for d in cur.description]
+            rows = cur.fetchall()
             if row_limit is not None and len(rows) > row_limit:
                 rows = rows[:row_limit]
             df = pd.DataFrame(rows, columns=cols)
         else:
-            # for non-select statements
-            conn.commit()
+            # commit for non-select statements (defensive)
+            if not fetch:
+                conn.commit()
             df = pd.DataFrame()
 
-        # final cleanup
         return df
 
     except Exception as e:
-        # include a concise snippet of the SQL in the error so logs help debugging
         short_sql = sql if len(sql) < 400 else sql[:400] + "..."
-        raise RuntimeError(f"run_query failed. SQL: {short_sql} Params: {type(params).__name__} Error: {e}") from e
+        raise RuntimeError(f"run_query failed. SQL: {short_sql} ParamsType: {type(params).__name__} Error: {e}") from e
 
     finally:
         try:
