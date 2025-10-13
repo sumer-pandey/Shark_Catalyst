@@ -1,6 +1,6 @@
 # utils.py (updated with plotly theme helper and formatting utilities)
 import streamlit as st
-from db import run_query
+from db import engine
 import pandas as pd
 import plotly.io as pio
 
