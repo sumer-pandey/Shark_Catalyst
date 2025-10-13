@@ -57,16 +57,37 @@
 #             conn.close()
 
 
-# db.py  <-- edit this file
-import pandas as pd
-from sqlalchemy import create_engine
+# db.py (edit only this top section)
+
 import os
+from sqlalchemy import create_engine
+from dotenv import load_dotenv
 
-# your DB URL (should come from env or dotenv as before)
-DATABASE_URL = os.environ.get("DATABASE_URL")  # keep your existing pattern
+# Load local .env when running locally (safe no-op on Streamlit Cloud)
+load_dotenv()
 
-# create engine once (reuse across calls)
+# Read database URL from environment
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# Helpful error if missing (avoid creating engine with None)
+if not DATABASE_URL:
+    # This is intentionally a very clear error so logs point straight to the fix
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "Please set DATABASE_URL to your Supabase/Postgres connection string.\n\n"
+        "Example (fill with your values):\n"
+        "postgresql://<db_user>:<password>@<host>:5432/<db_name>?sslmode=require\n\n"
+        "-> In Streamlit Cloud: open your app > Manage app > Settings > Secrets, add key DATABASE_URL.\n"
+        "-> Locally: create a .env file or export DATABASE_URL before running.\n"
+        "If your password contains special characters, URL-encode them (e.g. %40 for @)."
+    )
+
+# Create engine (once)
+# If your Supabase requires SSL you can include ?sslmode=require in DATABASE_URL
 _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+# If other modules expect `engine` variable, export it:
+engine = _engine
 
 def run_query(sql: str, params=None, fetch=True, row_limit=None):
     """
