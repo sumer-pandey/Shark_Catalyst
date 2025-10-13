@@ -4,7 +4,7 @@ from utils import cached_query, format_currency
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(layout="wide")
+# st.set_page_config(layout="wide")
 
 # --- Deterministic myth list (20 items). Money columns are IN LAKHS in dataset. ---
 MYTHS = [

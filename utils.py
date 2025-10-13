@@ -5,11 +5,37 @@ import pandas as pd
 import plotly.io as pio
 
 @st.cache_data(ttl=600)
-def cached_query(sql: str, params: dict = None) -> pd.DataFrame:
+
+def cached_query(sql: str, params=None):
     """
-    Cached wrapper around run_query.
+    Run a SQL query and return a pandas.DataFrame.
+    Robust handling for params being:
+      - None
+      - dict (named params)
+      - tuple/list (positional params)  <-- handled safely via raw_connection + pandas.read_sql
+    This avoids SQLAlchemy executemany misinterpretation for tuple/list params.
     """
-    return run_query(sql, params)
+    # If the SQL engine object is an SQLAlchemy Engine, use raw_connection + pandas.read_sql
+    # This ensures psycopg2 receives params as a single parameter set (tuple/list) rather than executemany.
+    conn = engine.raw_connection()
+    try:
+        # pandas.read_sql will pass params through to the DB-API cursor.execute(sql, params)
+        # which accepts a tuple/list for single execution.
+        df = pd.read_sql(sql, conn, params=params)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    # Ensure DataFrame columns are normalized (optional)
+    return df
+
+# def cached_query(sql: str, params: dict = None) -> pd.DataFrame:
+#     """
+#     Cached wrapper around run_query.
+#     """
+#     return run_query(sql, params)
 
 def format_currency(x):
     """

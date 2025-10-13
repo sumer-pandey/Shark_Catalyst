@@ -4,7 +4,7 @@ from utils import cached_query, format_currency
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(layout="wide")
+# st.set_page_config(layout="wide")
 
 def _get_min_max(column, season):
     # FIX: dbo.deals -> public.deals, ISNULL/COALESCE, use %s for :season parameter
