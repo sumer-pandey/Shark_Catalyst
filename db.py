@@ -57,115 +57,79 @@
 #             conn.close()
 
 
-# db.py
+# db.py - Using Supabase native client (no DATABASE_URL needed)
 import os
 import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+import streamlit as st
 from typing import Optional
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-_ENGINE: Optional[Engine] = None
+_CONNECTION_PARAMS: Optional[dict] = None
 
-def _get_database_url():
+def _get_connection_params():
     """
-    Get database URL from environment or Streamlit secrets.
-    Priority order:
-    1. Environment variable DATABASE_URL
-    2. Streamlit secrets DATABASE_URL (top-level)
-    3. Streamlit secrets connections.supabase.database_url
+    Get database connection parameters from Streamlit secrets or environment.
+    NO DATABASE_URL parsing - just direct parameters.
     """
-    # Check environment first
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url and "://" in db_url:
-        return db_url
+    global _CONNECTION_PARAMS
     
-    # Try Streamlit secrets
+    if _CONNECTION_PARAMS is not None:
+        return _CONNECTION_PARAMS
+    
+    params = {}
+    
+    # Try Streamlit secrets first
     try:
-        import streamlit as st
-        
-        # Top-level secret (RECOMMENDED)
-        if "DATABASE_URL" in st.secrets:
-            db_url = st.secrets["DATABASE_URL"]
-            if isinstance(db_url, str) and "://" in db_url:
-                return db_url
-        
-        # Nested secret (alternative)
         if "connections" in st.secrets and "supabase" in st.secrets["connections"]:
             supabase = st.secrets["connections"]["supabase"]
-            if "database_url" in supabase:
-                db_url = supabase["database_url"]
-                if isinstance(db_url, str) and "://" in db_url:
-                    return db_url
-    except Exception:
+            
+            # Direct mapping from secrets
+            params["host"] = supabase.get("host")
+            params["port"] = int(supabase.get("port", 5432))
+            params["database"] = supabase.get("database") or supabase.get("dbname")
+            params["user"] = supabase.get("user")
+            params["password"] = supabase.get("password")
+            params["sslmode"] = supabase.get("sslmode", "require")
+            
+            # Validate we got everything
+            required = ["host", "database", "user", "password"]
+            if all(params.get(k) for k in required):
+                _CONNECTION_PARAMS = params
+                return params
+    except Exception as e:
         pass
     
-    return None
-
-def create_real_engine():
-    """Create SQLAlchemy engine with proper error handling."""
-    db_url = _get_database_url()
+    # Fallback to environment variables
+    params["host"] = os.getenv("DB_HOST") or os.getenv("SUPABASE_HOST")
+    params["port"] = int(os.getenv("DB_PORT", "5432"))
+    params["database"] = os.getenv("DB_NAME") or os.getenv("SUPABASE_DB")
+    params["user"] = os.getenv("DB_USER") or os.getenv("SUPABASE_USER")
+    params["password"] = os.getenv("DB_PASSWORD") or os.getenv("SUPABASE_PASSWORD")
+    params["sslmode"] = os.getenv("DB_SSLMODE", "require")
     
-    if not db_url:
+    # Validate
+    required = ["host", "database", "user", "password"]
+    if not all(params.get(k) for k in required):
+        missing = [k for k in required if not params.get(k)]
         raise RuntimeError(
-            "DATABASE_URL is not set or the provided secret is not a full connection URL.\n\n"
-            "Please add a secret named DATABASE_URL with the full connection string:\n"
-            "postgresql://<username>:<percent-encoded-password>@<host>:<port>/<dbname>\n\n"
-            "Important: Encode special characters in password using percent-encoding:\n"
-            "  @ becomes %40\n"
-            "  # becomes %23\n"
-            "  $ becomes %24\n\n"
-            "Example:\n"
-            "DATABASE_URL = \"postgresql://postgres.user:pass%40word@host.supabase.com:6543/postgres\"\n\n"
-            "Add this in Streamlit Cloud: App Settings → Secrets"
+            f"Missing database connection parameters: {', '.join(missing)}\n\n"
+            f"Please add to Streamlit Secrets:\n"
+            f"[connections.supabase]\n"
+            f"host = \"your-host.supabase.com\"\n"
+            f"port = 6543\n"
+            f"database = \"postgres\"\n"
+            f"user = \"postgres.yourproject\"\n"
+            f"password = \"your_password\"\n"
         )
     
-    if "://" not in db_url:
-        raise RuntimeError(
-            f"Invalid DATABASE_URL format. Must be a full URL like:\n"
-            f"postgresql://user:pass@host:port/dbname\n"
-            f"Found: {db_url[:50]}..."
-        )
-    
-    return create_engine(db_url, pool_pre_ping=True, pool_recycle=3600)
+    _CONNECTION_PARAMS = params
+    return params
 
-def get_engine() -> Engine:
-    """Get or create SQLAlchemy engine."""
-    global _ENGINE
-    if _ENGINE is None:
-        _ENGINE = create_real_engine()
-    return _ENGINE
-
-class _LazyEngineProxy:
-    """Lazy engine proxy for backwards compatibility."""
-    def __init__(self):
-        self._real = None
-    
-    def _ensure(self):
-        if self._real is None:
-            self._real = get_engine()
-        return self._real
-    
-    def connect(self, *args, **kwargs):
-        return self._ensure().connect(*args, **kwargs)
-    
-    def raw_connection(self, *args, **kwargs):
-        return self._ensure().raw_connection(*args, **kwargs)
-    
-    def execute(self, *args, **kwargs):
-        real = self._ensure()
-        if hasattr(real, "execute"):
-            return real.execute(*args, **kwargs)
-        with real.connect() as conn:
-            return conn.execute(*args, **kwargs)
-    
-    def dispose(self):
-        if self._real is not None:
-            self._real.dispose()
-    
-    def __getattr__(self, name):
-        return getattr(self._ensure(), name)
-
-engine = _LazyEngineProxy()
+def get_connection():
+    """Get a raw psycopg2 connection."""
+    params = _get_connection_params()
+    return psycopg2.connect(**params)
 
 def run_query(sql: str, params=None, fetch=True, row_limit=None):
     """
@@ -173,7 +137,7 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
     
     Args:
         sql: SQL query string
-        params: Query parameters (tuple, list, dict, or list of tuples/dicts)
+        params: Query parameters (tuple, list, dict)
         fetch: If True, return DataFrame for SELECT queries
         row_limit: Max rows to return
     
@@ -183,8 +147,8 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
     conn = None
     cur = None
     try:
-        conn = engine.raw_connection()
-        cur = conn.cursor()
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         
         if params is None:
             cur.execute(sql)
@@ -196,14 +160,12 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
             cur.execute(sql, params)
         
         if fetch and cur.description:
-            cols = [d[0] for d in cur.description]
             rows = cur.fetchall()
             if row_limit and len(rows) > row_limit:
                 rows = rows[:row_limit]
-            return pd.DataFrame(rows, columns=cols)
+            return pd.DataFrame(rows)
         else:
-            if not fetch:
-                conn.commit()
+            conn.commit()
             return pd.DataFrame()
     
     except Exception as e:
@@ -211,8 +173,8 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
         raise RuntimeError(
             f"Query failed.\n"
             f"SQL: {short_sql}\n"
-            f"Params: {type(params).__name__}\n"
-            f"Error: {e}"
+            f"Params: {type(params).__name__ if params else 'None'}\n"
+            f"Error: {str(e)}"
         ) from e
     
     finally:
@@ -226,3 +188,19 @@ def run_query(sql: str, params=None, fetch=True, row_limit=None):
                 conn.close()
             except:
                 pass
+
+# Backwards compatibility
+def get_engine():
+    """Legacy function - returns connection params instead."""
+    return _get_connection_params()
+
+class _ConnectionProxy:
+    """Proxy for backwards compatibility with engine.connect() style code."""
+    
+    def connect(self):
+        return get_connection()
+    
+    def raw_connection(self):
+        return get_connection()
+
+engine = _ConnectionProxy()
