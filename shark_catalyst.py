@@ -11,6 +11,28 @@ load_dotenv()
 st.set_page_config(page_title="Shark Catalyst - Interactive Analytics Platform for Indian Startup Ecosystem", page_icon="assets/logo.png", layout="wide")
 
 
+import streamlit as st
+from db import _get_connection_params
+
+st.write("### Database Connection Test")
+try:
+    params = _get_connection_params()
+    st.write("✅ Connection parameters loaded:")
+    st.write(f"- Host: {params['host']}")
+    st.write(f"- Port: {params['port']}")
+    st.write(f"- Database: {params['database']}")
+    st.write(f"- User: {params['user']}")
+    st.write(f"- Password: {'*' * len(params['password'])}")
+    
+    # Try actual connection
+    from db import run_query
+    df = run_query("SELECT 1 as test")
+    st.write("✅ Database connection successful!")
+    st.write(df)
+except Exception as e:
+    st.error(f"❌ Connection failed: {e}")
+
+
 st.markdown(
     """
     <style>
