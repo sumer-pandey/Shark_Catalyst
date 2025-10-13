@@ -6,21 +6,6 @@ import datetime
 import os
 from dotenv import load_dotenv
 
-st.write("### DEBUG INFO")
-st.write(f"Environment DATABASE_URL exists: {'DATABASE_URL' in os.environ}")
-st.write(f"Streamlit secrets keys: {list(st.secrets.keys())}")
-
-if 'DATABASE_URL' in st.secrets:
-    url = st.secrets['DATABASE_URL']
-    st.write(f"DATABASE_URL found in secrets: {url[:20]}...{url[-20:]}")
-else:
-    st.write("❌ DATABASE_URL NOT in st.secrets")
-
-if 'connections' in st.secrets:
-    st.write(f"Connections found: {list(st.secrets['connections'].keys())}")
-else:
-    st.write("❌ No 'connections' in st.secrets")
-
 load_dotenv()
 
 st.set_page_config(page_title="Shark Catalyst - Interactive Analytics Platform for Indian Startup Ecosystem", page_icon="assets/logo.png", layout="wide")
