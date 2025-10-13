@@ -72,9 +72,75 @@ _ENGINE: Optional[Engine] = None
 
 def _get_database_url():
     """
-    Resolve database connection URL from environment variables.
+    Resolve database connection URL from environment variables or Streamlit secrets.
+
+    Order of precedence:
+      1. Environment variables: DATABASE_URL, SUPABASE_DB_URL
+      2. Streamlit secrets top-level: DATABASE_URL or database_url
+      3. Streamlit secrets nested: connections -> supabase -> database_url
+      4. Streamlit dotted key: "connections.supabase" containing a dict with database_url
+      5. Recursive search for any 'database_url' or 'DATABASE_URL' key inside st.secrets
+
+    Note: passwords containing '@' must be percent-encoded (e.g. '@' -> '%40') when used in URLs.
     """
-    return os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+    # 1) env vars (fast path)
+    env_val = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+    if env_val:
+        return env_val
+
+    # 2) try Streamlit secrets (only available at runtime on Streamlit)
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        st = None
+
+    if st is None:
+        return None
+
+    # direct top-level keys
+    if "DATABASE_URL" in st.secrets:
+        return st.secrets["DATABASE_URL"]
+    if "database_url" in st.secrets:
+        return st.secrets["database_url"]
+
+    # nested conventional layout: st.secrets["connections"]["supabase"]["database_url"]
+    try:
+        if "connections" in st.secrets and "supabase" in st.secrets["connections"]:
+            cand = st.secrets["connections"]["supabase"].get("database_url") \
+                   or st.secrets["connections"]["supabase"].get("database")
+            if cand:
+                return cand
+    except Exception:
+        pass
+
+    # dotted key layout: st.secrets["connections.supabase"]["database_url"]
+    try:
+        if "connections.supabase" in st.secrets:
+            cs = st.secrets["connections.supabase"]
+            if isinstance(cs, dict):
+                cand = cs.get("database_url") or cs.get("database")
+                if cand:
+                    return cand
+    except Exception:
+        pass
+
+    # last resort: recursive search for 'database_url' or 'DATABASE_URL' anywhere inside st.secrets
+    def _recursive_find(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in ("database_url", "DATABASE_URL", "database"):
+                    return v
+                res = _recursive_find(v)
+                if res:
+                    return res
+        return None
+
+    found = _recursive_find(st.secrets)
+    if found:
+        return found
+
+    return None
+
 
 def create_real_engine():
     """
