@@ -98,7 +98,7 @@ shark-catalyst/
 |--------|---------------|
 | **Frontend / UI** | Streamlit (Python) |
 | **Backend Logic** | Pandas, SQLAlchemy, NumPy |
-| **Database** | SQLite / MSSQL / PostgreSQL (configurable) |
+| **Database** | PostgreSQL |
 | **Visualization** | Plotly, NetworkX |
 | **Styling & UX** | Streamlit Custom Components + CSS |
 | **Version Control** | Git + GitHub |
