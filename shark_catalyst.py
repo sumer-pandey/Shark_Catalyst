@@ -220,7 +220,7 @@ with st.container():
     with col1:
         st.markdown("**Data source:** Kaggle dataset - Thirumani (Shark Tank India).  ")
         st.markdown("[Kaggle: Shark Tank India (Thirumani)](https://www.kaggle.com/datasets/thirumani/shark-tank-india)  ")
-        st.markdown("[GitHub repo](https://github.com/sumer-pandey)  |  [LinkedIn](https://www.linkedin.com/in/sumerpandey/)")
+        # st.markdown("[GitHub repo](https://github.com/sumer-pandey)  |  [LinkedIn](https://www.linkedin.com/in/sumerpandey/)")
     
     with col2:
         try:
@@ -233,17 +233,6 @@ with st.container():
                 st.markdown(f"**App loaded:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception:
             st.markdown(f"**App loaded:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # with col2:
-    #     try:
-    #         last_refresh_df = cached_query("SELECT MAX(original_air_date) AS last_date FROM dbo.deals")
-    #         if not last_refresh_df.empty and last_refresh_df.iloc[0].last_date is not None:
-    #             lr = last_refresh_df.iloc[0].last_date
-    #             st.markdown(f"**Last data date:** {lr}")
-    #         else:
-    #             st.markdown(f"**App loaded:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    #     except Exception:
-    #         st.markdown(f"**App loaded:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # Small project signature (appears at the end of every page)
 st.markdown("---")
@@ -253,18 +242,6 @@ st.markdown("<div font-weight: bold;style='font-size:0.95rem;color:#9AA3AC'>Crea
 st.markdown("<div style='font-size:0.95rem;color:#9AA3AC'><a href='https://www.linkedin.com/in/sumerpandey/' target='_blank'>LinkedIn</a> | <a href='https://github.com/sumer-pandey' target='_blank'>GitHub</a></div><br>", unsafe_allow_html=True)
 
 st.markdown("")
-
-# Added the disclaimer line below the existing project signature
-# st.markdown(
-#     """
-#     <div style='font-size:0.8rem;color:gray;text-align:left;'>
-#         "Shark Tank India" is a trademark of Sony Pictures Networks India. This site is for educational purposes only under fair use, with no intent of trademark infringement.
-#         <br><a href='/Disclaimer' target='_self'>View full disclaimer</a>
-#     </div>
-#     """,
-#     unsafe_allow_html=True
-# )
-# Disclaimer with working internal link
 
 st.markdown(
     """
