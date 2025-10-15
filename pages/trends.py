@@ -19,14 +19,21 @@ def page_trends(filters):
     season = filters.get("season", "All")
     
     # Define parameters for conditional filtering once
-    # If season is 'All', we pass an empty tuple/list (no positional args needed)
-    # If season is a specific value, we pass a list containing that value
     if season == 'All':
-        params = []
+        params = tuple()  # Changed from [] to tuple()
         season_filter_sql = "1=1"
     else:
-        params = [season]
-        season_filter_sql = "season = %s" # Positional placeholder
+        params = (season,)  # Changed from [season] to (season,)
+        season_filter_sql = "season = %s"
+
+
+    # # If season is a specific value, we pass a list containing that value
+    # if season == 'All':
+    #     params = []
+    #     season_filter_sql = "1=1"
+    # else:
+    #     params = [season]
+    #     season_filter_sql = "season = %s" # Positional placeholder
 
     # --- Helpers ---
     def format_lakhs(val):
