@@ -2,6 +2,8 @@
 ### Data-Driven Insights from Shark Tank India  
 _A comprehensive analytical engine for decoding investment patterns, market myths, and startup behavior._
 
+**Access the app here: _https://sharkcatalyst.streamlit.app/_**
+
 ---
 
 ## 📊 Overview
