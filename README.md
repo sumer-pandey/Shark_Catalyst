@@ -163,5 +163,4 @@ Licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for det
 
 ---
 
-### 🏆 Built with accuracy, curiosity, and data-driven storytelling.  
-_We win — that’s what we do._
+### 🏆 Built with accuracy, curiosity, and data-driven storytelling.
